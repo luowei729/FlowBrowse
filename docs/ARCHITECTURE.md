@@ -22,8 +22,8 @@
 ## 2. 通道职责
 
 ### 主干通道（全量接管，TCP）
-- 扩展用 `chrome.proxy.settings.set` 配置 PAC 脚本，把"非中国"流量指向 `<域名>:443` 的 HTTPS 转发代理（单一 Go 服务，ALPN=http/1.1，Chrome 原生兼容）。
-- 服务端对 CONNECT 与绝对形式请求做转发代理(BasicAuth 鉴权)；对普通 origin 请求，根路径返回空 200（逐字节等同未配置的 Caddy 默认，无自定义页，防指纹），订阅走密钥路径静态文件。
+- 扩展用 `chrome.proxy.settings.set` 配置 PAC 脚本，把"非中国"流量指向 `<域名>:<FB_PROXY_PORT>` 的 HTTPS 转发代理（单一 Go 服务，ALPN=http/1.1，Chrome 原生兼容）。
+- **代理默认免鉴权 + 保密端口**：Chrome 对 https 代理 CONNECT 不支持扩展自动注入 BasicAuth（会弹框），故代理走非常规端口 `FB_PROXY_PORT`、不鉴权（靠端口隐蔽）；站点与订阅在 443（对外像正常网站）。服务端对 CONNECT/绝对形式做转发；根路径返回空 200（逐字节等同未配置的 Caddy 默认，防指纹），订阅走密钥路径静态文件。
 - 覆盖 http/https/ftp/wss。**这一跳是 TCP+TLS，不是 QUIC**——这是 Chrome 平台的硬约束。
 
 ### QUIC 通道（应用层，UDP/h3）

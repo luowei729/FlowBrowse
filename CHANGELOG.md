@@ -37,3 +37,14 @@
   - 真实 Chrome 内核端到端：导入真机订阅→connect→chrome.proxy=pac_script 生效→断开还原，全通过。
 - 【遗留】WebTransport 探测在本沙箱报 "Opening handshake failed"（服务器无任何 QUIC 会话日志 + TCP 全通、UDP 不达），判定为**沙箱出站 UDP/443 受限**，非代码问题；需在用户本机真实 Chrome 复核。offscreen 探测已加 ping 就绪等待修复竞态。
 - 【go.mod 坑】注释行 `#` 被 Go 1.26 mod 解析拒绝，已去除注释；Actions 曾因此失败。
+
+## 2026-10-20（代理鉴权方案改为免鉴权+保密端口）
+
+- 【根因】真机实测：`onAuthRequired` 触发且返回凭据，但服务器 **0 条带凭据 CONNECT**——Chrome 对 **https 代理的 CONNECT 不支持扩展自动注入 BasicAuth**（只会弹框）。“HTTPS 代理隐蔽 + BasicAuth 免弹框”在 Chrome 扩展不可兼得。
+- 【决策】用户选定：HTTPS 代理 **免鉴权 + 保密端口**。重构单一 Go 服务为分端口：
+  - TCP 443 = 站点（空200首页 + 密钥路径订阅），对外像正常网站；
+  - TCP `FB_PROXY_PORT`（默认2096，可自定义）= HTTPS 转发代理，`FB_PROXY_AUTH=off` 默认不鉴权（靠非常规端口隐蔽）；
+  - CONNECT 目标仍在 TLS 内→对 GFW 隐藏；保留 FB_PROXY_AUTH=on 开关（若换 HTTP/SOCKS5 代理可启用）。
+- 【fb://】链接代理端口改用 FB_PROXY_PORT；订阅 URL 仍在站点端口 443。gen-sub-link/install/status/.env 同步。
+- 【验证 v0.3.0】服务器实测：单进程监听 443/2096/udp443/80；GET /→200空、订阅→200、**代理 CONNECT(2096,免鉴权)→200**；WebTransport 真机 RTT 199ms（上一轮已验）。
+- 【安全权衡】免鉴权转发代理有被滥用风险，缓解：非常规端口+自有域名隐蔽；后续可加 IP 白名单（拉过订阅的 IP 才放行）。
