@@ -87,8 +87,8 @@ func main() {
 
 	// 代理 TLS：强制 ALPN=http/1.1（标准 https 代理走 HTTP/1.1 CONNECT，最稳），证书由 autocert 动态提供
 	proxyTLS := &tls.Config{GetCertificate: mgr.GetCertificate, NextProtos: []string{"http/1.1"}}
-	// WebTransport TLS：QUIC/h3 用同一 autocert 证书
-	wtTLS := &tls.Config{GetCertificate: mgr.GetCertificate, NextProtos: []string{"h3"}}
+	// WebTransport TLS：QUIC/h3 用同一 autocert 证书；ALPN 由 http3.ConfigureTLSConfig 统一设置
+	wtTLS := &tls.Config{GetCertificate: mgr.GetCertificate}
 
 	errc := make(chan error, 3)
 
@@ -130,7 +130,7 @@ func newProxyHandler(cfg config) http.Handler {
 		switch {
 		case r.Method == http.MethodConnect:
 			handleConnect(w, r, cfg)
-		case r.URL.IsAbsolute() && r.URL.Host != "":
+		case r.URL.IsAbs() && r.URL.Host != "":
 			handleAbsolute(w, r, cfg, subFS)
 		default:
 			handleSite(w, r, subFS)
@@ -258,7 +258,7 @@ func runWebTransport(cfg config, wtTLS *tls.Config) error {
 	mux := http.NewServeMux()
 	h3Server := &http3.Server{
 		Addr:      cfg.wtAddr,
-		TLSConfig: wtTLS,
+		TLSConfig: http3.ConfigureTLSConfig(wtTLS),
 		QUICConfig: &quic.Config{
 			EnableDatagrams: true, // WebTransport 数据报（RTT 探测）前提
 			MaxIdleTimeout:  30 * time.Second,
