@@ -3,21 +3,22 @@
 ## 1. FlowBrowse 节点链接 `fb://`（借鉴 hy2 URI 约定，非 Hysteria2 协议）
 
 ```
-fb://<USER>:<PASS>@<domain>:<tcp_port>/?udp=<udp_port>&region=<地区>&name=<节点显示名>
+fb://<USER>:<PASS>@<domain>:<tcp_port>/?region=<地区>&name=<节点显示名>
 ```
 
 | 组成 | 含义 | 默认/示例 |
 |---|---|---|
-| `USER:PASS` | 主干 HTTPS 转发代理 BasicAuth 凭据 | `u1:p2` |
-| `domain:tcp_port` | Caddy 转发代理地址 | `sel2.lkz.pub:443` |
-| `udp=` | WebTransport(QUIC) 探测/信令端口 | `443`（可自定义） |
+| `USER:PASS` | 可选 Basic 凭据（默认服务靠 IP 白名单，不强制校验） | `u1:p2` |
+| `domain:tcp_port` | HTTPS 转发代理地址（与订阅共用同一 TCP 443） | `sel2.lkz.pub:443` |
 | `region=` | 地区标签（UI 展示、分组） | `SG` |
 | `name=` | 节点显示名 | `FlowBrowse-新加坡` |
+
+> v0.4.0 起已放弃 QUIC，**不再有 `udp=` 字段**（旧链接若带 `udp=` 会被忽略，向后兼容）。
 
 ### 解析规则
 1. scheme 必须为 `fb`，否则忽略。
 2. userinfo 取 `USER:PASS`；host:port 取 TCP 代理地址。
-3. query 解析 `udp`/`region`/`name`；缺失时 `udp` 默认 443，`name` 默认 host。
+3. query 解析 `region`/`name`；`name` 缺失时默认 host。
 4. `name`/`region` 需 URL 解码（支持中文）。
 5. 生成节点对象：`{source:'subscribe', name, region, proxy:{host,port,scheme:'https',user,pass}, wtPort}`。
 

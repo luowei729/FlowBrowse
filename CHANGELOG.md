@@ -55,3 +55,12 @@
 - 域名：geosite:cn 的 Suffix/Plain 有 11万条，全塞 PAC 太大太慢，保留内置精简域名列表；远程可选。
 - rules.js：远程解析器健壮化（兼容纯文本/Clash YAML/DOMAIN-SUFFIX）；PAC 生成时**预计算 CIDR→[base,mask] 数值对**，避免每请求重复 ip2long。
 - 验证：生成 PAC 158KB、语法合法；1.0.1.5→DIRECT、8.8.8.8→代理、baidu→DIRECT、google→代理均正确。
+
+## 2026-10-20（v0.4.0 放弃 QUIC，回归单端口 TCP 443 + IP 白名单）
+
+- 【架构收敛】用户决定放弃 QUIC/WebTransport（因 Chrome 不能把浏览器通用流量交给 UDP/QUIC，且代理必须走 TCP）。删除整个 WebTransport/offscreen 子系统（`extension/offscreen/`、probe 改 HTTPS 延迟、manifest 去 offscreen 权限）。
+- 【单端口复用】服务端改为 **仅 TCP 443**（代理+订阅+首页按请求形态分流：CONNECT=代理、GET=订阅/空200）+ TCP 80(ACME)；不再有 2096/62096 等额外端口。go.mod 去掉 quic-go/webtransport-go，仅留 autocert。
+- 【鉴权定论】用户先想要密码鉴权；实测（无头 Chrome 端到端）：`onAuthRequired` 能触发且拿到正确凭据（isProxy=true hasCreds=true），但 **Chrome 对 HTTPS(TLS) 代理仍拒绝采纳，报 ERR_INVALID_AUTH_CREDENTIALS**（curl 同凭据能过，证明服务端无误）——确认是 Chrome MV3 对 HTTPS 代理鉴权的硬限制。
+- 【方案】改用 **自动 IP 白名单**：拉到有效订阅 URL（密钥路径即凭证）的客户端 IP 自动放行（TTL 30天、持久化 allowlist.json）；仅作用于代理。默认 `FB_PROXY_ALLOW=on`、`FB_PROXY_AUTH=off`。
+- 【验证 v0.4.0】服务端：仅监听 443+80；未拉订阅 CONNECT→403、拉订阅后 CONNECT→200；首页 200 空。无头 Chrome 端到端：导入订阅→连接→经代理访问 example.com=200 **无弹框**。
+- 【UI】popup/options 重写为深色高级主题（渐变/卡片/状态胶囊）；工具栏角标 ON/OFF 一眼判开关；内置全量 CN IP 段 + 补字节跳动/抖音等域名修“抖音走代理”。

@@ -4,8 +4,8 @@
 
 - 服务器：Ubuntu 22.04/24.04（测试机 `193.123.230.166`），amd64 或 arm64
 - 域名（如 `sel2.lkz.pub`）已解析到服务器公网 IP
-- 放行端口：TCP 80(ACME)、TCP 443(站点:首页+订阅)、TCP `FB_PROXY_PORT`(转发代理,默认2096,保密端口)、UDP 443(WebTransport)
-- **云安全组需同时放行 TCP 443 与 UDP 443**（WebTransport 靠 UDP443；若 UDP443 不通，测速会失败）
+- 放行端口：**仅需 TCP 80(ACME) 与 TCP 443（代理+订阅+首页复用）**。已放弃 QUIC，无需再放行 UDP 443。
+- 代理与订阅共用 TCP 443：服务端按请求形态分流（CONNECT=代理、GET=订阅/首页），对外像一个正常 HTTPS 网站。
 
 ## 1. 二进制来源：GitHub Actions 预编译（服务器不编译）
 
@@ -39,8 +39,8 @@ sudo bash flowbrowse.sh install      # 或 sudo bash install.sh
 ```bash
 bash status.sh                                   # 服务/端口/证书/首页/订阅/健康
 curl -o /dev/null -w '%{http_code}\n' https://<域名>/            # 期望 200 空body(防指纹)
-curl -x https://<域名>:<FB_PROXY_PORT> -o /dev/null -w '%{http_code}\n' https://www.example.com   # 期望 2xx(代理免鉴权可用)
-curl '<订阅URL>'                                  # 期望 200，base64
+curl '<订阅URL>' -o /dev/null -w '%{http_code}\n'              # 先拉一次订阅，把本机 IP 登记进白名单
+curl -x https://<域名>:443 -o /dev/null -w '%{http_code}\n' https://www.example.com   # 期望 2xx(白名单已放行本机 IP)
 ```
 
 ## 6. 卸载

@@ -30,11 +30,11 @@
 
 ## 3. 访问控制
 
-- **代理默认免鉴权 + 保密端口**：因 Chrome 对 https 代理的 CONNECT 不支持扩展自动注入 BasicAuth（会弹框），主干改为：代理监听非常规端口 `FB_PROXY_PORT`（默认 2096），靠端口隐蔽 + 自有域名降低被发现/滥用；CONNECT 目标仍在 TLS 内对 GFW 隐藏。
-- 保留 `FB_PROXY_AUTH=on` 开关：若日后改用 HTTP/SOCKS5 代理（扩展可自动鉴权），可重新启用 BasicAuth。
+- **代理 = 单端口 TCP 443 + 自动 IP 白名单**：代理与订阅/首页共用 TCP 443（按 CONNECT/GET 分流）。因 Chrome 对 HTTPS 代理的 CONNECT 不支持扩展自动注入 BasicAuth（实测 `onAuthRequired` 返回正确凭据仍 `ERR_INVALID_AUTH_CREDENTIALS`），访问控制改为 **IP 白名单**：只有拉到有效订阅 URL（密钥路径即凭证）的客户端 IP 才放行 CONNECT（TTL 30天）。CONNECT 目标仍在 TLS 内对 GFW 隐藏。
+- 保留 `FB_PROXY_AUTH=on` 开关：可选叠加 Basic（但 HTTPS 代理下会弹框，不推荐）。
 - 订阅接口靠“密钥目录/随机文件名”不可猜路径保护；token/凭据属敏感信息，导出/分享需自行注意。
 - 证书与私钥仅在服务器 autocert 缓存目录，不入仓库、不入记忆。
-- 建议后续：为代理加 IP 白名单（仅近期拉过订阅的 IP 可用），进一步降低免鉴权代理被滥用风险。
+- **白名单残余风险**：家庭宽带换 IP 后需重拉/刷新一次订阅；白名单文件存于服务器，需保护服务器本身。
 
 ## 4. 合规与用途
 
