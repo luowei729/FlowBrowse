@@ -22,8 +22,10 @@ export async function initAuthFromStorage() {
 export function registerAuthListener() {
   chrome.webRequest.onAuthRequired.addListener(
     (details) => {
-      // 同步返回：仅对代理鉴权挑战(isProxy)注入，避免把代理凭据误发给普通站点的 401。
-      if (details.isProxy && cachedCreds && cachedCreds.username) {
+      // 诊断日志：打印真机上代理鉴权挑战的关键信息，便于定位为何弹框
+      console.log('[FlowBrowse][auth] onAuthRequired isProxy=' + details.isProxy + ' hasCreds=' + !!(cachedCreds && cachedCreds.username) + ' url=' + details.url);
+      // 同步返回：只要内存里有凭据就注入（不再用 isProxy 做门槛，避免真机 isProxy 为假时漏注入）。
+      if (cachedCreds && cachedCreds.username) {
         return { authCredentials: { username: cachedCreds.username, password: cachedCreds.password } };
       }
       return {};
