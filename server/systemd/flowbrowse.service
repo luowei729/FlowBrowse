@@ -9,8 +9,8 @@ Wants=network-online.target
 Type=simple
 User=flowbrowse
 Group=flowbrowse
-# 前缀 - 表示环境文件缺失不致命（用程序默认值）
-EnvironmentFile=-/etc/flowbrowse/env
+# 前缀 - 表示环境文件缺失不致命（用程序默认值）；与 install.sh 统一用 .env
+EnvironmentFile=-/etc/flowbrowse/.env
 ExecStart=/opt/flowbrowse/bin/flowbrowse-server
 Restart=always
 RestartSec=5
