@@ -5,14 +5,15 @@ set -uo pipefail
 ENV_FILE="/etc/flowbrowse/.env"
 [ -f "${ENV_FILE}" ] && { set -a; . "${ENV_FILE}"; set +a; } || echo "[FlowBrowse] 未找到 ${ENV_FILE}，可能尚未安装。"
 
-DOMAIN="${DOMAIN:-}"; FB_TCP_PORT="${FB_TCP_PORT:-443}"; FB_WT_PORT="${FB_WT_PORT:-443}"; FB_ACME_PORT="${FB_ACME_PORT:-80}"
+DOMAIN="${DOMAIN:-}"; FB_TCP_PORT="${FB_TCP_PORT:-443}"; FB_PROXY_PORT="${FB_PROXY_PORT:-2096}"; FB_WT_PORT="${FB_WT_PORT:-443}"; FB_ACME_PORT="${FB_ACME_PORT:-80}"
 NODE_TOKEN="${NODE_TOKEN:-}"; FB_SUB_FILE="${FB_SUB_FILE:-}"
 
 echo "===== 服务状态 ====="
 printf '%-24s : %s\n' "flowbrowse" "$(systemctl is-active flowbrowse 2>/dev/null || echo unknown)"
 
 echo "===== 端口监听 ====="
-ss -ltnp "sport = :${FB_TCP_PORT}" 2>/dev/null | tail -n +2 | head -1 || echo "TCP ${FB_TCP_PORT} 未监听"
+ss -ltnp "sport = :${FB_TCP_PORT}" 2>/dev/null | tail -n +2 | head -1 || echo "TCP ${FB_TCP_PORT}(站点) 未监听"
+ss -ltnp "sport = :${FB_PROXY_PORT}" 2>/dev/null | tail -n +2 | head -1 || echo "TCP ${FB_PROXY_PORT}(代理) 未监听"
 ss -lunp "sport = :${FB_WT_PORT}"  2>/dev/null | tail -n +2 | head -1 || echo "UDP ${FB_WT_PORT} 未监听"
 ss -ltnp "sport = :${FB_ACME_PORT}" 2>/dev/null | tail -n +2 | head -1 || echo "TCP ${FB_ACME_PORT}(ACME) 未监听"
 
@@ -31,4 +32,6 @@ if [ -n "${NODE_TOKEN}" ] && [ -n "${FB_SUB_FILE}" ]; then
   curl -sS -m 10 -o /dev/null -w "订阅 => HTTP %{http_code} size=%{size_download}\n" "https://${DOMAIN}:${FB_TCP_PORT}/${NODE_TOKEN}/${FB_SUB_FILE}" || echo "订阅访问失败"
 fi
 curl -sS -m 10 --http3 -o /dev/null -w "healthz(h3) => HTTP %{http_code}\n" "https://${DOMAIN}:${FB_WT_PORT}/healthz" 2>/dev/null || echo "h3 healthz 探测不可用(UDP ${FB_WT_PORT})"
+echo "-- 代理转发(CONNECT 到保密端口) --"
+curl -sS -m 12 -x "https://${DOMAIN}:${FB_PROXY_PORT}" -o /dev/null -w "proxy->example.com => HTTP %{http_code}\n" https://www.example.com/ 2>/dev/null || echo "代理测试不可用(TCP ${FB_PROXY_PORT})"
 echo "完成。"

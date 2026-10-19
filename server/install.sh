@@ -54,7 +54,12 @@ fi
 
 : "${DOMAIN:?DOMAIN 未设置}"
 : "${AUTH_USER:?AUTH_USER 未设置}"
-export FB_TCP_PORT="${FB_TCP_PORT:-443}" FB_WT_PORT="${FB_WT_PORT:-443}" FB_ACME_PORT="${FB_ACME_PORT:-80}" FB_CERT_CACHE="${FB_CERT_CACHE:-${DATA_DIR}/certcache}"
+export FB_TCP_PORT="${FB_TCP_PORT:-443}" FB_PROXY_PORT="${FB_PROXY_PORT:-2096}" FB_WT_PORT="${FB_WT_PORT:-443}" FB_ACME_PORT="${FB_ACME_PORT:-80}" FB_CERT_CACHE="${FB_CERT_CACHE:-${DATA_DIR}/certcache}" FB_PROXY_AUTH="${FB_PROXY_AUTH:-off}"
+
+# 确保 .env 内含代理端口/开关，避免与程序默认值漂移
+grep -q '^FB_PROXY_PORT=' "${ENV_FILE}" || echo "FB_PROXY_PORT=${FB_PROXY_PORT}" >> "${ENV_FILE}"
+grep -q '^FB_PROXY_AUTH=' "${ENV_FILE}" || echo "FB_PROXY_AUTH=${FB_PROXY_AUTH}" >> "${ENV_FILE}"
+chmod 600 "${ENV_FILE}"
 
 # ---------- 2) 预检域名解析 ----------
 if ! getent ahosts "${DOMAIN}" >/dev/null 2>&1; then
@@ -143,7 +148,7 @@ systemctl enable flowbrowse >/dev/null 2>&1 || true
 # ---------- 5) 生成订阅（先起服务可能还没证书，订阅文件独立生成）----------
 log "生成订阅文件..."
 SUB_OUT="$(AUTH_USER="${AUTH_USER}" AUTH_PASS="${AUTH_PASS}" DOMAIN="${DOMAIN}" \
-  FB_TCP_PORT="${FB_TCP_PORT}" FB_WT_PORT="${FB_WT_PORT}" NODE_TOKEN="${NODE_TOKEN}" FB_SUB_FILE="${FB_SUB_FILE}" \
+  FB_TCP_PORT="${FB_TCP_PORT}" FB_PROXY_PORT="${FB_PROXY_PORT}" FB_WT_PORT="${FB_WT_PORT}" NODE_TOKEN="${NODE_TOKEN}" FB_SUB_FILE="${FB_SUB_FILE}" \
   NODE_NAME="${NODE_NAME:-FlowBrowse}" NODE_REGION="${NODE_REGION:-N/A}" FB_WEB_ROOT="${FB_WEB_ROOT}" \
   bash "${SCRIPT_DIR}/scripts/gen-sub-link.sh")"
 chown -R flowbrowse:flowbrowse "${FB_WEB_ROOT}"
@@ -157,9 +162,10 @@ FB_LINK="$(echo "${SUB_OUT}" | sed -n 's/^FB_LINK=//p')"
 cat <<EOF
 
 =================== FlowBrowse 安装完成 ===================
-HTTPS 转发代理(TCP) : ${DOMAIN}:${FB_TCP_PORT}
-QUIC WebTransport   : ${DOMAIN}:${FB_WT_PORT} (UDP)
-ACME(证书)          : ${DOMAIN}:${FB_ACME_PORT} -> Let's Encrypt 自动申请/续期
+站点(首页+订阅)   : ${DOMAIN}:${FB_TCP_PORT}  (TCP, 对外像正常网站)
+HTTPS 转发代理    : ${DOMAIN}:${FB_PROXY_PORT}  (TCP, 保密端口; 鉴权=${FB_PROXY_AUTH})
+QUIC WebTransport : ${DOMAIN}:${FB_WT_PORT}  (UDP)
+ACME(证书)        : ${DOMAIN}:${FB_ACME_PORT} -> Let's Encrypt 自动申请/续期
 
 订阅地址(粘贴进插件"订阅管理")：
   ${SUB_URL}

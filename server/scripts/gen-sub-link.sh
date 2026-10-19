@@ -16,6 +16,7 @@ set -euo pipefail
 # ---- 读取配置，端口给出合理默认 ----
 DOMAIN="${DOMAIN:?DOMAIN 未设置}"
 FB_TCP_PORT="${FB_TCP_PORT:-443}"
+FB_PROXY_PORT="${FB_PROXY_PORT:-2096}"
 FB_WT_PORT="${FB_WT_PORT:-443}"
 AUTH_USER="${AUTH_USER:?AUTH_USER 未设置}"
 AUTH_PASS="${AUTH_PASS:?AUTH_PASS 未设置}"
@@ -39,10 +40,10 @@ REGION_ENC="$(urlencode "$NODE_REGION")"
 USER_ENC="$(urlencode "$AUTH_USER")"
 PASS_ENC="$(urlencode "$AUTH_PASS")"
 
-# 组装单条 fb:// 链接（格式规范见 docs/RULES_FORMAT.md）
-FB_LINK="fb://${USER_ENC}:${PASS_ENC}@${DOMAIN}:${FB_TCP_PORT}/?udp=${FB_WT_PORT}&region=${REGION_ENC}&name=${NAME_ENC}"
+# 组装单条 fb:// 链接（代理端口=FB_PROXY_PORT 保密端口；格式规范见 docs/RULES_FORMAT.md）
+FB_LINK="fb://${USER_ENC}:${PASS_ENC}@${DOMAIN}:${FB_PROXY_PORT}/?udp=${FB_WT_PORT}&region=${REGION_ENC}&name=${NAME_ENC}"
 
-# 订阅地址：走密钥路径段 $NODE_TOKEN + 随机文件名 $FB_SUB_FILE（整条路径不可猜，防嗅探/枚举）
+# 订阅地址：走站点端口 $FB_TCP_PORT（对外像正常网站）+ 密钥目录段 $NODE_TOKEN + 随机文件名 $FB_SUB_FILE
 SUB_URL="https://${DOMAIN}:${FB_TCP_PORT}/${NODE_TOKEN}/${FB_SUB_FILE}"
 
 # ---- 写入静态订阅文件 ----
