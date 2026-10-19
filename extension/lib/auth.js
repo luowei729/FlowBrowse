@@ -22,8 +22,8 @@ export async function initAuthFromStorage() {
 export function registerAuthListener() {
   chrome.webRequest.onAuthRequired.addListener(
     (details) => {
-      // 同步返回：只要内存里有凭据就注入（覆盖 CONNECT 与绝对形式两类代理鉴权）
-      if (cachedCreds && cachedCreds.username) {
+      // 同步返回：仅对代理鉴权挑战(isProxy)注入，避免把代理凭据误发给普通站点的 401。
+      if (details.isProxy && cachedCreds && cachedCreds.username) {
         return { authCredentials: { username: cachedCreds.username, password: cachedCreds.password } };
       }
       return {};
