@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# 同一 ref 只保留最新一个 run，自动取消旧的，避免排队占用 runner 导致卡住
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,7 +23,7 @@ jobs:
       matrix:
         goarch: [amd64, arm64]
     env:
-      GO_VERSION: "1.24"
+      GO_VERSION: "stable"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

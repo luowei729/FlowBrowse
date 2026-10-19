@@ -1,8 +1,8 @@
 module flowbrowse-wt
 
-go 1.24
+go 1.26
 
 require (
-	github.com/quic-go/quic-go v0.54.0
-	github.com/quic-go/webtransport-go v0.9.0
+	github.com/quic-go/quic-go v0.62.0
+	github.com/quic-go/webtransport-go v0.13.0
 )
