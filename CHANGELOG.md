@@ -48,3 +48,10 @@
 - 【fb://】链接代理端口改用 FB_PROXY_PORT；订阅 URL 仍在站点端口 443。gen-sub-link/install/status/.env 同步。
 - 【验证 v0.3.0】服务器实测：单进程监听 443/2096/udp443/80；GET /→200空、订阅→200、**代理 CONNECT(2096,免鉴权)→200**；WebTransport 真机 RTT 199ms（上一轮已验）。
 - 【安全权衡】免鉴权转发代理有被滥用风险，缓解：非常规端口+自有域名隐蔽；后续可加 IP 白名单（拉过订阅的 IP 才放行）。
+
+## 2026-10-20（内置全量分流规则）
+
+- 用户反馈 .dat 二进制过重（geoip 16MB），改找纯文本规则源。**内置全量 CN IP 段**：从国内可直连的 jsDelivr `gaoyifan/china-operator-ip china.txt` 下载 6527 条 CIDR 写入 `extension/rules/cn-ip-cidr.txt`，默认离线即有完整规则。
+- 域名：geosite:cn 的 Suffix/Plain 有 11万条，全塞 PAC 太大太慢，保留内置精简域名列表；远程可选。
+- rules.js：远程解析器健壮化（兼容纯文本/Clash YAML/DOMAIN-SUFFIX）；PAC 生成时**预计算 CIDR→[base,mask] 数值对**，避免每请求重复 ip2long。
+- 验证：生成 PAC 158KB、语法合法；1.0.1.5→DIRECT、8.8.8.8→代理、baidu→DIRECT、google→代理均正确。
