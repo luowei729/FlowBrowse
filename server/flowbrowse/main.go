@@ -260,8 +260,9 @@ func runWebTransport(cfg config, wtTLS *tls.Config) error {
 		Addr:      cfg.wtAddr,
 		TLSConfig: http3.ConfigureTLSConfig(wtTLS),
 		QUICConfig: &quic.Config{
-			EnableDatagrams: true, // WebTransport 数据报（RTT 探测）前提
-			MaxIdleTimeout:  30 * time.Second,
+			EnableDatagrams:                  true, // WebTransport 数据报（RTT 探测）前提
+			EnableStreamResetPartialDelivery: true, // webtransport-go v0.13 必需：缺失会导致 Chrome "Opening handshake failed"（回环实测已验证）
+			MaxIdleTimeout:                   30 * time.Second,
 		},
 	}
 	webtransport.ConfigureHTTP3Server(h3Server)
