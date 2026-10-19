@@ -126,6 +126,19 @@ func newRootHandler(cfg config, al *allowList) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1) CONNECT = 转发代理请求
 		if r.Method == http.MethodConnect {
+			// 临时鉴权诊断：只记录“是否带凭据/凭据长度/校验结果”，不落任何密钥明文
+			pa := r.Header.Get("Proxy-Authorization")
+			if pa == "" {
+				pa = r.Header.Get("Authorization")
+			}
+			authLen := 0
+			if strings.HasPrefix(pa, "Basic ") {
+				if d, e := base64.StdEncoding.DecodeString(strings.TrimPrefix(pa, "Basic ")); e == nil {
+					authLen = len(d)
+				}
+			}
+			log.Printf("[CONNECT] from=%s target=%s hasAuth=%v authLen=%d allowed=%v authOK=%v",
+				clientIP(r), r.Host, pa != "", authLen, al.allowed(r), authOK(r, cfg))
 			if !al.allowed(r) {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
@@ -191,6 +204,10 @@ func authOK(r *http.Request, cfg config) bool {
 	user, pass, ok := strings.Cut(string(decoded), ":")
 	if !ok {
 		return false
+	}
+	// 仅用户名模式：AUTH_PASS 为空时只校验用户名（用户名即密钥，密码留空）
+	if cfg.authPass == "" {
+		return subtle.ConstantTimeCompare([]byte(user), []byte(cfg.authUser)) == 1
 	}
 	return subtle.ConstantTimeCompare([]byte(user), []byte(cfg.authUser)) == 1 &&
 		subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.authPass)) == 1
