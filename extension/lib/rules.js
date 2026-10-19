@@ -14,29 +14,82 @@ async function readList(url) {
   return text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
 }
 
-// 加载 CN 域名后缀与 IP CIDR：优先用户在设置里配置的远程 URL（rulesRemoteEnabled），否则用内置
+// 健壮解析远程规则文本：兼容三种常见格式——纯文本、Clash YAML（`payload:` + `- 'x'`）、`DOMAIN-SUFFIX,x` 行。
+// kind='domain' 取域名；kind='cidr' 取 IPv4 CIDR。无法识别的行自动跳过。
+function parseRuleText(text, kind) {
+  const out = [];
+  for (let line of String(text).split(/\r?\n/)) {
+    line = line.trim();
+    if (!line || line.startsWith('#') || line === 'payload:') continue;
+    line = line.replace(/^-\s*/, '').replace(/^['"]|['"]$/g, '').trim(); // 去 YAML 列表符号与引号
+    if (!line) continue;
+    // Clash 规则行 TYPE,value —— 仅取域名/地理相关类型
+    const m = line.match(/^([A-Za-z][A-Za-z-]*),(.*)$/);
+    if (m) {
+      if (!/DOMAIN|GEODOMAIN|GEOIP|IP-CIDR/i.test(m[1])) continue;
+      line = m[2].trim();
+    }
+    if (kind === 'cidr') {
+      if (/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(line)) out.push(line);
+    } else {
+      if (/^\d+\.\d+\.\d+\.\d+/.test(line)) continue; // 域名列表里跳过 IP 行
+      out.push(line.replace(/^\./, ''));
+    }
+  }
+  return out;
+}
+
+// 拉取远程文本并解析为指定类型列表
+async function fetchRemoteList(url, kind) {
+  const resp = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return parseRuleText(await resp.text(), kind);
+}
+
+// 加载 CN 域名后缀与 IP CIDR：域名/CIDR 各取所需——
+//   设了远程 URL 就用远程（解析健壮），否则用内置。允许只远程 CIDR、域名仍用内置。
 export async function loadCnData(settings = {}) {
   let domains, cidrs;
-  if (settings.rulesRemoteEnabled && settings.rulesRemoteUrlDomains && settings.rulesRemoteUrlCidrs) {
-    try {
-      // 远程更新：拉取最新 geosite/geoip 派生的精简列表（见 docs/RULES_FORMAT.md 更新方式）
-      const [d, c] = await Promise.all([fetch(settings.rulesRemoteUrlDomains).then((r) => r.text()), fetch(settings.rulesRemoteUrlCidrs).then((r) => r.text())]);
-      domains = d.split(/\r?\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith('#'));
-      cidrs = c.split(/\r?\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith('#'));
-    } catch (e) {
-      console.warn('[FlowBrowse] 远程规则拉取失败，回退内置：', e);
-      domains = await readList(BUNDLED_DOMAINS);
-      cidrs = await readList(BUNDLED_CIDRS);
-    }
+  const enabled = settings.rulesRemoteEnabled;
+
+  // 域名：远程优先，失败/未配置回退内置
+  if (enabled && settings.rulesRemoteUrlDomains) {
+    try { domains = await fetchRemoteList(settings.rulesRemoteUrlDomains, 'domain'); }
+    catch (e) { console.warn('[FlowBrowse] 远程域名规则失败，回退内置:', e); domains = await readList(BUNDLED_DOMAINS); }
   } else {
     domains = await readList(BUNDLED_DOMAINS);
+  }
+
+  // CIDR：远程优先，失败/未配置回退内置
+  if (enabled && settings.rulesRemoteUrlCidrs) {
+    try { cidrs = await fetchRemoteList(settings.rulesRemoteUrlCidrs, 'cidr'); }
+    catch (e) { console.warn('[FlowBrowse] 远程IP规则失败，回退内置:', e); cidrs = await readList(BUNDLED_CIDRS); }
+  } else {
     cidrs = await readList(BUNDLED_CIDRS);
   }
+
   return { domains, cidrs };
 }
 
 // 把字符串数组安全内联进 PAC 源码（JSON 转义，避免注入与语法错误）
 function js(arr) { return JSON.stringify(arr); }
+
+// 生成时预计算 CIDR → [base, mask] 数值对，避免 PAC 每请求对 6000+ 条重复 ip2long（性能关键）
+function toNetPairs(cidrs) {
+  const pairs = [];
+  for (const c of cidrs) {
+    const seg = String(c).split('/');
+    const oct = seg[0].split('.');
+    const len = parseInt(seg[1], 10);
+    if (oct.length !== 4 || isNaN(len)) continue;
+    let base = 0, bad = false;
+    for (let i = 0; i < 4; i++) { const o = parseInt(oct[i], 10); if (isNaN(o) || o < 0 || o > 255) { bad = true; break; } base = ((base << 8) | o) >>> 0; }
+    if (bad) continue;
+    const mask = len === 0 ? 0 : (0xffffffff << (32 - len)) >>> 0;
+    pairs.push([(base & mask) >>> 0, mask]);
+  }
+  return pairs;
+}
 
 // 生成 PAC 脚本
 //   proxyHost/proxyPort：主干 HTTPS 转发代理（完全来自节点/设置，无硬编码域名）
@@ -55,14 +108,15 @@ function FindProxyForURL(url, host) {
 `.trim();
   }
 
-  // 分流模式：内联 CN 域名后缀与 IP CIDR，命中即 DIRECT，其余 PROXY
-  // 重要：PAC 数据串必须为纯 ASCII（chrome.proxy 限制 pacScript.data 仅支持 ASCII），故下方模板内的注释一律用英文。
+  // 分流模式：内联 CN 域名后缀 + 预计算好的 IP 网段数值对，命中即 DIRECT，其余 PROXY
+  // 重要：PAC 数据串必须为纯 ASCII（chrome.proxy 限制 pacScript.data 仅支持 ASCII），故模板内注释一律用英文。
+  const nets = toNetPairs(cnData.cidrs);
   return `
 // ==== FlowBrowse auto-generated split PAC (do not edit by hand) ====
 var CN_DOMAINS = ${js(cnData.domains)};
-var CN_CIDRS = ${js(cnData.cidrs)};
+var CN_NETS = ${js(nets)}; // [base, mask] precomputed
 
-// Convert dotted IPv4 to a 32-bit unsigned integer
+// Convert dotted IPv4 to a 32-bit unsigned integer (host only)
 function ip2long(ip) {
   var parts = ip.split('.');
   if (parts.length !== 4) return null;
@@ -75,17 +129,12 @@ function ip2long(ip) {
   return n >>> 0;
 }
 
-// Whether an IP-literal host falls inside any CN CIDR
+// IP-literal host in any CN net? (integer compare over precomputed pairs)
 function inCnCidr(host) {
   var ip = ip2long(host);
   if (ip === null) return false;
-  for (var i = 0; i < CN_CIDRS.length; i++) {
-    var seg = CN_CIDRS[i].split('/');
-    var base = ip2long(seg[0]);
-    var len = parseInt(seg[1], 10);
-    if (base === null || isNaN(len)) continue;
-    var mask = len === 0 ? 0 : (0xffffffff << (32 - len)) >>> 0;
-    if ((ip & mask) === (base & mask)) return true;
+  for (var i = 0; i < CN_NETS.length; i++) {
+    if ((ip & CN_NETS[i][1]) === CN_NETS[i][0]) return true;
   }
   return false;
 }

@@ -53,9 +53,9 @@
     <section class="card">
       <h2>分流规则 <span class="muted">（默认用内置列表；可指向远程 geosite/geoip 更新）</span></h2>
       <label class="check"><input id="rulesRemoteEnabled" type="checkbox" /> 启用远程规则更新</label>
-      <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="https://…/geosite_cn_domains.txt" /></label>
-      <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://…/geoip_cn_cidrs.txt" /></label>
-      <p class="muted">来源建议：Loyalsoldier/v2ray-rules-dat（geosite.dat category:cn、geoip.dat country:cn 派生的纯文本）。</p>
+      <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="留空=用内置；可填 jsDelivr 上的 Clash/纯文本域名列表" /></label>
+      <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt" /></label>
+      <p class="muted">默认 IP 源（国内可直连）：jsDelivr <code>gaoyifan/china-operator-ip</code> china.txt。域名源可填 Loyalsoldier/clash-rules 的 direct.txt（YAML）等；解析已兼容纯文本/YAML/DOMAIN-SUFFIX。</p>
     </section>
 
     <!-- ===== 通用设置 ===== -->

@@ -22,9 +22,10 @@ export const DEFAULT_SETTINGS = {
   portOverrideUdp: null,     // WebTransport UDP 端口覆盖（null=用节点自带）
   autoConnectOnStartup: false,
   probeIntervalMinutes: 10,  // 周期探测间隔
-  rulesRemoteEnabled: false, // 是否允许从远程更新分流规则
-  rulesRemoteUrlDomains: '', // 远程 CN 域名列表 URL
-  rulesRemoteUrlCidrs: '',   // 远程 CN IP CIDR 列表 URL
+  rulesRemoteEnabled: false, // 默认用内置完整规则（已含全量 CN IP 段）；需要自动更新时再开启
+  // 内置已预置全量 CN IP 段；下列为可选的国内可直连远程源（jsDelivr CDN）
+  rulesRemoteUrlDomains: '', // 域名源留空=用内置；可填 Clash YAML/纯文本域名列表 URL
+  rulesRemoteUrlCidrs: 'https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt',
 };
 
 // ===== 运行态默认值 =====
