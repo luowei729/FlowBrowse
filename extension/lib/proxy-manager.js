@@ -1,6 +1,6 @@
 // proxy-manager.js —— 应用/清除 chrome.proxy（PAC 模式）
 // 职责边界：只负责"把配置翻译成 chrome.proxy 调用"，不碰节点/规则细节（那些在各自模块）。
-import { loadAll, effectiveProxy, PROXY_AUTH_KEY } from './config.js';
+import { loadAll, effectiveProxy } from './config.js';
 import { buildPac, loadCnData } from './rules.js';
 import { setProxyCreds, clearProxyCreds } from './auth.js';
 
@@ -32,14 +32,11 @@ export async function applyProxy(node, settings) {
     scope: 'regular',
   });
 
-  // 暂存代理凭据：写 storage（持久）+ 同步刷新 auth 内存缓存（供 onAuthRequired 同步注入）
+  // 暂存代理凭据：写 storage（持久）+ 刷新内存缓存（供 onAuthRequired 注入），统一交给 auth.js
   if (p.user) {
-    const creds = { username: p.user, password: p.pass, host: p.host };
-    await chrome.storage.local.set({ [PROXY_AUTH_KEY]: creds });
-    setProxyCreds(creds);
+    await setProxyCreds({ username: p.user, password: p.pass });
   } else {
-    await chrome.storage.local.remove(PROXY_AUTH_KEY);
-    clearProxyCreds();
+    await clearProxyCreds();
   }
 
   return `已连接：${node.name} (${p.host}:${p.port}) · ${settings.mode === 'global' ? '全局' : '分流'}`;
@@ -48,8 +45,7 @@ export async function applyProxy(node, settings) {
 // 清除代理：还原系统设置并删掉暂存凭据
 export async function clearProxy() {
   await chrome.proxy.settings.clear({ scope: 'regular' });
-  await chrome.storage.local.remove(PROXY_AUTH_KEY);
-  clearProxyCreds(); // 同步清内存缓存，避免断开后仍注入旧凭据
+  await clearProxyCreds(); // 清内存缓存 + storage，避免断开后仍注入旧凭据
   return '已断开，恢复系统直连';
 }
 

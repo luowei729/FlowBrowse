@@ -1,19 +1,26 @@
-// auth.js —— 为 HTTPS 转发代理注入 Proxy-Authorization 凭据
-// 为什么单独模块：MV3 移除了 webRequestBlocking，onAuthRequired 用于提供代理凭据；
+// auth.js —— 为 HTTPS 转发代理注入 Proxy-Authorization 凭据（用户名可为密钥，密码可空）
+// 为什么单独模块：MV3 移除了 webRequestBlocking，代理鉴权只能靠 onAuthRequired 程序注入。
 //   监听器必须在 service worker 顶层【同步】注册（否则事件丢失）。
-// 关键教训（实测定位）：onAuthRequired 用"返回 Promise 异步读 storage"给 https 代理注入凭据时，
-//   Chrome 拿到 407 后不会带凭据重试 → 报 ERR_INVALID_AUTH_CREDENTIALS。
-//   改为：凭据缓存在内存变量里，onAuthRequired【同步】返回，Chrome 立即据此重试。
+// 健壮性设计：
+//   1) 凭据缓存在内存 cachedCreds，SW 存活期同步命中；
+//   2) SW 休眠被唤醒时缓存可能为空 → listener 内异步从 storage 兜底加载（解决唤醒竞态）；
+//   3) 返回 Promise 供 Chrome 采纳（MV3 下异步返回 authCredentials 是被支持的）。
 import { PROXY_AUTH_KEY } from './config.js';
 
-// 内存凭据缓存：SW 存活期间同步可读；SW 重启后由 initAuthFromStorage 从 storage 预热。
 let cachedCreds = null;
 
-// 设置/清除缓存（proxy-manager 在 connect/disconnect 时调用）
-export function setProxyCreds(creds) { cachedCreds = creds || null; }
-export function clearProxyCreds() { cachedCreds = null; }
+// 设置凭据：写入内存缓存并持久化到 storage（SW 重启后可恢复）
+export async function setProxyCreds(creds) {
+  cachedCreds = creds && creds.username ? { username: creds.username, password: creds.password || '' } : null;
+  await chrome.storage.local.set({ [PROXY_AUTH_KEY]: cachedCreds });
+}
 
-// 从 storage 预热缓存（SW 启动时调用，保证休眠重启后仍能同步注入）
+export async function clearProxyCreds() {
+  cachedCreds = null;
+  await chrome.storage.local.remove(PROXY_AUTH_KEY);
+}
+
+// 从 storage 预热缓存（SW 启动时调用）
 export async function initAuthFromStorage() {
   const data = await chrome.storage.local.get(PROXY_AUTH_KEY);
   cachedCreds = data[PROXY_AUTH_KEY] || null;
@@ -21,18 +28,19 @@ export async function initAuthFromStorage() {
 
 export function registerAuthListener() {
   chrome.webRequest.onAuthRequired.addListener(
-    (details) => {
-      // 诊断日志
-      console.log('[FlowBrowse][auth] onAuthRequired isProxy=' + details.isProxy + ' hasCreds=' + !!(cachedCreds && cachedCreds.username) + ' url=' + details.url);
-      // MV3 关键：onAuthRequired 需返回 Promise 才会被 Chrome 采纳（同步返回对象会被忽略）。
-      // 无凭据时 resolve({}) 让挑战自然失败，不弹框。
-      if (cachedCreds && cachedCreds.username) {
-        return Promise.resolve({ authCredentials: { username: cachedCreds.username, password: cachedCreds.password } });
+    async (details) => {
+      // 唤醒竞态兜底：缓存空则现读 storage
+      if (!cachedCreds) {
+        try { await initAuthFromStorage(); } catch (_) {}
       }
-      return Promise.resolve({});
+      console.log('[FlowBrowse][auth] onAuthRequired isProxy=' + !!details.isProxy + ' hasCreds=' + !!(cachedCreds && cachedCreds.username));
+      if (cachedCreds && cachedCreds.username) {
+        return { authCredentials: { username: cachedCreds.username, password: cachedCreds.password || '' } };
+      }
+      // 无凭据：返回空对象，让挑战自然失败（不主动弹框由服务端 407 决定）
+      return {};
     },
     { urls: ['<all_urls>'] }
-    // MV3：同步返回对象即可，无需 extraInfoSpec
   );
-  console.log('[FlowBrowse] 代理鉴权监听器已注册(同步注入)');
+  console.log('[FlowBrowse] 代理鉴权监听器已注册');
 }

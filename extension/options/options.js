@@ -58,7 +58,7 @@ function render(state) {
     const tagCur = active ? '<span class="tag">当前</span> ' : '';
     const tagSrc = `<span class="tag ${n.source === 'subscribe' ? 'subs' : ''}">${n.source === 'subscribe' ? '订阅' : '手动'}</span>`;
     info.innerHTML = `<div class="title">${esc(n.name)} ${tagCur}${tagSrc}</div>` +
-      `<div class="sub">${esc(n.proxy.host)}:${n.proxy.port} · WT ${n.wtPort || 443}${n.region ? ' · ' + esc(n.region) : ''}${esc(rtt)}</div>`;
+      `<div class="sub">${esc(n.proxy.host)}:${n.proxy.port}${n.region ? ' · ' + esc(n.region) : ''}${esc(rtt)}</div>`;
     li.append(info);
     const bSel = btn(active ? '已选中' : '选为当前', 'ghost', () => send({ action: 'selectNode', id: n.id }).then(refresh));
     if (active) bSel.disabled = true;
@@ -103,7 +103,6 @@ function fillNodeForm(n) {
   $('nRegion').value = n.region || '';
   $('nHost').value = n.proxy.host || '';
   $('nTcp').value = n.proxy.port || '';
-  $('nUdp').value = n.wtPort || '';
   $('nUser').value = n.proxy.user || '';
   $('nPass').value = n.proxy.pass || '';
   $('nodeSubmit').textContent = '保存修改';
@@ -129,7 +128,6 @@ $('nodeForm').addEventListener('submit', async (e) => {
       user: $('nUser').value.trim(),
       pass: $('nPass').value,
     },
-    wtPort: parseInt($('nUdp').value, 10) || 443,
   };
   const id = $('nodeId').value;
   const resp = await send(id ? { action: 'updateNode', id, input } : { action: 'addNode', input });

@@ -7,8 +7,8 @@
   "permissions": [
     "proxy",
     "storage",
+    "unlimitedStorage",
     "alarms",
-    "offscreen",
     "webRequest"
   ],
 

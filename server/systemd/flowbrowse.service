@@ -1,7 +1,7 @@
-# FlowBrowse 单一服务端单元（HTTPS 转发代理 + 站点 + 订阅 + WebTransport + autocert）
-# 一个进程监听 TCP80(ACME)/TCP443(代理+站点+订阅)/UDP443(WebTransport)；证书由程序内 autocert 自动申请续期。
+# FlowBrowse 单一服务端单元（TCP 443 复用：HTTPS 转发代理 + 订阅 + 首页 + IP 白名单；TCP 80 ACME）
+# 已放弃 QUIC/WebTransport。证书由程序内 autocert 自动申请续期。
 [Unit]
-Description=FlowBrowse server (https forward proxy + webtransport + site)
+Description=FlowBrowse server (https forward proxy + subscription site + autocert)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,14 +9,15 @@ Wants=network-online.target
 Type=simple
 User=flowbrowse
 Group=flowbrowse
-EnvironmentFile=/etc/flowbrowse/.env
+# 前缀 - 表示环境文件缺失不致命（用程序默认值）
+EnvironmentFile=-/etc/flowbrowse/env
 ExecStart=/opt/flowbrowse/bin/flowbrowse-server
 Restart=always
 RestartSec=5
 # 非 root 绑定 80/443 特权端口
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-# autocert 证书缓存目录需归属服务用户
+# autocert 证书缓存与 IP 白名单文件目录需归属服务用户
 ReadWritePaths=/var/lib/flowbrowse
 StandardOutput=journal
 StandardError=journal

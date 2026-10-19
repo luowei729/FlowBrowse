@@ -13,62 +13,94 @@ function render(state) {
   const { settings, nodes, runtime } = state;
   const connected = runtime.connected && settings.mode !== 'off';
 
-  // 状态灯与文本
-  $('dot').className = 'dot ' + (connected ? 'on' : 'off');
-  $('status').textContent = runtime.statusText || (connected ? '已连接' : '未连接');
+  // #2 状态胶囊：一眼看出开/关
+  const pill = $('statePill');
+  pill.className = 'pill ' + (connected ? 'ok' : 'off');
+  pill.textContent = connected ? 'ON' : 'OFF';
+  $('stateText').textContent = runtime.statusText || (connected ? '已连接' : '未连接');
 
-  // 连接按钮：已连接显示"断开"
+  // 连接按钮
   const btn = $('connectBtn');
-  btn.textContent = connected ? '断开' : '连接';
-  btn.classList.toggle('disconnect', connected);
+  btn.textContent = connected ? '断开连接' : '连接';
 
   // 节点下拉
-  const sel = $('nodeSel');
+  const sel = $('nodeSelect');
   sel.innerHTML = '';
-  if (!nodes.length) {
+  const hasNodes = nodes.length > 0;
+  if (!hasNodes) {
     const opt = document.createElement('option');
-    opt.textContent = '（无节点，请到"设置"添加节点或订阅）';
+    opt.textContent = '（无节点，请到管理页添加节点或订阅）';
     opt.value = '';
     sel.appendChild(opt);
-    sel.disabled = true;
-    $('connectBtn').disabled = true;
-    $('probeBtn').disabled = true;
   } else {
-    sel.disabled = false;
-    $('connectBtn').disabled = false;
-    $('probeBtn').disabled = false;
     for (const n of nodes) {
-      const probe = runtime.lastProbe && runtime.lastProbe[n.id];
-      const rtt = probe ? (probe.ok ? ` ${probe.rttMs}ms` : ' ✕') : '';
+      const p = runtime.lastProbe && runtime.lastProbe[n.id];
+      const lat = p ? (p.ok ? ` · ${p.latencyMs}ms` : ' · ✕') : '';
       const opt = document.createElement('option');
       opt.value = n.id;
-      opt.textContent = `${n.name}${n.region ? ' · ' + n.region : ''}${rtt}`;
+      opt.textContent = `${n.name}${n.region ? ' · ' + n.region : ''}${lat}`;
       sel.appendChild(opt);
     }
     sel.value = settings.activeNodeId || nodes[0].id;
   }
+  $('connectBtn').disabled = !hasNodes;
+  $('btnProbe').disabled = !hasNodes;
 
-  // 模式
-  $('modeSel').value = settings.mode || 'split';
-
-  // 端口覆盖（值来自设置；占位提示节点默认）
-  const active = nodes.find((n) => n.id === (sel.value || settings.activeNodeId));
-  $('tcpPort').value = settings.portOverrideTcp || '';
-  $('udpPort').value = settings.portOverrideUdp || '';
-  if (active) {
-    $('tcpPort').placeholder = '默认 ' + active.proxy.port;
-    $('udpPort').placeholder = '默认 ' + (active.wtPort || 443);
+  // 模式单选
+  for (const r of document.querySelectorAll('input[name=mode]')) {
+    r.checked = (settings.mode || 'split') === r.value;
   }
+
+  // 端口覆盖
+  const active = nodes.find((n) => n.id === (sel.value || settings.activeNodeId));
+  $('portTcp').value = settings.portOverrideTcp || '';
+  if (active) $('portTcp').placeholder = '默认 ' + active.proxy.port;
 
   // 当前节点延迟
   const p = active && runtime.lastProbe ? runtime.lastProbe[active.id] : null;
-  $('rtt').textContent = p ? (p.ok ? `QUIC RTT：${p.rttMs} ms` : `QUIC 不可用：${p.error || ''}`) : '';
+  $('latency').textContent = p ? (p.ok ? `${p.latencyMs} ms` : `不可达：${p.error || ''}`) : '--';
+
+  renderNodeList(nodes, settings.activeNodeId);
+}
+
+function renderNodeList(nodes, activeId) {
+  const ul = $('nodeList');
+  ul.innerHTML = '';
+  if (!nodes.length) {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="muted">暂无节点</span>';
+    ul.appendChild(li);
+    return;
+  }
+  for (const n of nodes) {
+    const li = document.createElement('li');
+    if (n.id === activeId) li.classList.add('active');
+    const name = document.createElement('span');
+    name.textContent = `${n.name}${n.region ? ' · ' + n.region : ''}`;
+    name.style.cursor = 'pointer';
+    name.title = '点击选择此节点';
+    name.addEventListener('click', async () => {
+      await send({ action: 'selectNode', id: n.id });
+      refresh();
+    });
+    const del = document.createElement('button');
+    del.textContent = '删除';
+    del.className = 'link';
+    del.addEventListener('click', async () => {
+      if (!confirm(`删除节点「${n.name}」？`)) return;
+      await send({ action: 'deleteNode', id: n.id });
+      refresh();
+    });
+    li.appendChild(name);
+    li.appendChild(del);
+    ul.appendChild(li);
+  }
 }
 
 async function refresh() {
   const resp = await send({ action: 'getState' });
   if (resp && resp.ok) render(resp.state);
-  else $('status').textContent = resp && resp.error ? resp.error : '后台未就绪';
+  else $('stateText').textContent = resp && resp.error ? resp.error : '后台未就绪';
 }
 
 // ===== 事件绑定 =====
@@ -77,7 +109,7 @@ $('connectBtn').addEventListener('click', async () => {
   if (connected) {
     await send({ action: 'disconnect' });
   } else {
-    const nodeId = $('nodeSel').value;
+    const nodeId = $('nodeSelect').value;
     if (!nodeId) return;
     const resp = await send({ action: 'connect', nodeId });
     if (resp && !resp.ok) alert('连接失败：' + resp.error);
@@ -85,39 +117,35 @@ $('connectBtn').addEventListener('click', async () => {
   refresh();
 });
 
-$('modeSel').addEventListener('change', async (e) => {
-  const resp = await send({ action: 'setMode', mode: e.target.value });
-  if (resp && resp.ok) render(resp.state);
-});
+for (const r of document.querySelectorAll('input[name=mode]')) {
+  r.addEventListener('change', async (e) => {
+    if (!e.target.checked) return;
+    const resp = await send({ action: 'setMode', mode: e.target.value });
+    if (resp && resp.ok) render(resp.state);
+  });
+}
 
-// 切换节点：若处于连接中则立即重连到所选节点
-$('nodeSel').addEventListener('change', async () => {
+$('nodeSelect').addEventListener('change', async () => {
   const connected = STATE && STATE.runtime.connected && STATE.settings.mode !== 'off';
-  if (connected) await send({ action: 'connect', nodeId: $('nodeSel').value });
+  if (connected) await send({ action: 'connect', nodeId: $('nodeSelect').value });
   refresh();
 });
 
-// 端口覆盖：输入变化后应用
-async function applyPorts() {
-  const tcp = parseInt($('tcpPort').value, 10) || null;
-  const udp = parseInt($('udpPort').value, 10) || null;
-  const resp = await send({ action: 'setPorts', tcp, udp });
+$('portTcp').addEventListener('change', async () => {
+  const tcp = parseInt($('portTcp').value, 10) || null;
+  const resp = await send({ action: 'setPorts', tcp });
   if (resp && resp.ok) render(resp.state);
-}
-$('tcpPort').addEventListener('change', applyPorts);
-$('udpPort').addEventListener('change', applyPorts);
-
-$('probeBtn').addEventListener('click', async () => {
-  $('rtt').textContent = '测速中…';
-  const resp = await send({ action: 'probeActive' });
-  if (resp && resp.ok) render(resp.state);
-  else $('rtt').textContent = '测速失败：' + (resp && resp.error || '');
 });
 
-function openOptions() { chrome.runtime.openOptionsPage(); }
-$('settingsBtn').addEventListener('click', openOptions);
-$('openOptions').addEventListener('click', (e) => { e.preventDefault(); openOptions(); });
+$('btnProbe').addEventListener('click', async () => {
+  $('latency').textContent = '测速中…';
+  const resp = await send({ action: 'probeActive' });
+  if (resp && resp.ok) render(resp.state);
+  else $('latency').textContent = '测速失败';
+});
 
-// 打开即刷新一次，并监听存储变化实时同步（如 SW 周期更新了探测结果）
+$('btnOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
+
+// 打开即刷新一次，并监听存储变化实时同步
 refresh();
 chrome.storage.onChanged.addListener(() => refresh());
