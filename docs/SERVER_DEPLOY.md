@@ -1,56 +1,55 @@
-# SERVER_DEPLOY.md — FlowBrowse 服务端部署手册
+# SERVER_DEPLOY.md — FlowBrowse 服务端部署手册（单一 Go 服务）
 
 ## 0. 前置
 
-- 服务器：Ubuntu 24.04（测试机 `193.123.230.166`）
-- 域名 `sel2.lkz.pub` 已解析到服务器公网 IP
-- 放行端口：TCP 80（HTTP-01 证书）、TCP 443（Caddy）、UDP 443（WebTransport）
+- 服务器：Ubuntu 22.04/24.04（测试机 `193.123.230.166`），amd64 或 arm64
+- 域名（如 `sel2.lkz.pub`）已解析到服务器公网 IP
+- 放行端口：TCP 80(ACME)、TCP 443(HTTPS 代理+站点+订阅)、UDP 443(WebTransport)
 
-## 1. 一键安装
+## 1. 二进制来源：GitHub Actions 预编译（服务器不编译）
+
+推代码到 GitHub → 打 `v*` tag 触发 `.github/workflows/build.yml` → 交叉编译 `flowbrowse-server-linux-{amd64,arm64}` 并发布 Release。
+`install.sh` 默认 `FB_BIN_MODE=prebuilt` 直接从 `https://github.com/<FB_REPO>/releases/latest/download/` 按架构下载。
+（如不便用 Actions，可设 `FB_BIN_MODE=build` 让服务器本地编译，会临时装 Go。）
+
+## 2. 一键安装
 
 ```bash
 # 上传 server/ 到服务器后：
-cd server
-cp config/.env.example /etc/flowbrowse/.env   # 或由 install.sh 自动创建
-vim /etc/flowbrowse/.env                        # 填 DOMAIN / AUTH_USER / AUTH_PASS / NODE_TOKEN / NODE_NAME
-sudo bash install.sh
+sudo bash flowbrowse.sh install      # 或 sudo bash install.sh
+# 配置在 /etc/flowbrowse/.env；口令/NODE_TOKEN/FB_SUB_FILE 占位时自动生成随机值
 ```
+`flowbrowse.sh`（无参数进菜单，或带子命令 install/uninstall/status/restart/sub/renew/logs/info）为统一入口。
 
-`install.sh` 会：
-1. 安装/放置 Caddy 与 WebTransport 二进制到 `/opt/flowbrowse/bin`。
-2. 写配置到 `/etc/flowbrowse`，生成 systemd 单元并开机自启。
-3. 通过 Caddy automatic HTTPS 申请 Let's Encrypt 证书。
-4. 结束时打印：订阅地址 + `fb://` 单节点链接 + `NODE_TOKEN`。
+安装会：装 systemd 单元 `flowbrowse.service`、设 UDP 缓冲区 sysctl、创建 `flowbrowse` 用户与 `/opt/flowbrowse /var/lib/flowbrowse /srv/flowbrowse`、生成订阅文件并打印订阅地址与 `fb://` 链接。
 
-## 2. 域名未生效的失败提示
+## 3. 证书（autocert 自动）
 
-若 `sel2.lkz.pub` 未解析/解析未生效，Caddy 申请证书会失败。脚本与 `journalctl -u flowbrowse-caddy` 会输出中文提示：
+服务端程序内用 `golang.org/x/crypto/acme/autocert`（HTTP-01，走 80 端口）自动申请并续期 Let's Encrypt，缓存于 `FB_CERT_CACHE`（默认 `/var/lib/flowbrowse/certcache`）。**无需 Caddy/certbot。**
 
-> [FlowBrowse] 域名未生效，证书申请失败，请将域名 A 记录指向本机后重跑 install.sh
+## 4. 域名未生效的失败提示
 
-服务会以受控方式重试；DNS 生效后可重新 `bash install.sh` 或 `systemctl restart flowbrowse-caddy`。
+若域名未解析，autocert 无法签发证书。`install.sh` 预检并中文提示：
+> [FlowBrowse][警告] 域名未生效：<域名> 无法解析。autocert 申请证书会失败。请将域名 A 记录指向本机后重跑。
+服务 `Restart=always` 会受控重试；DNS 生效后 `flowbrowse.sh renew` 或 `systemctl restart flowbrowse`。
 
-## 3. 验证
+## 5. 验证
 
 ```bash
-bash status.sh                                   # 汇总服务状态与证书
-curl -I https://sel2.lkz.pub                     # 应 200 且空 body（与原生 Caddy 默认行为一致，无自定义页）
-curl --http3 -I https://sel2.lkz.pub             # 支持 http3 的 curl 验证 h3
-curl 'https://sel2.lkz.pub/<NODE_TOKEN>/<FB_SUB_FILE>'   # 返回 base64 订阅（密钥目录/随机文件名）
+bash status.sh                                   # 服务/端口/证书/首页/订阅/健康
+curl -o /dev/null -w '%{http_code}\n' https://<域名>/            # 期望 200 空body(防指纹)
+curl -x https://<域名>:443 --proxy-user U:P -o /dev/null -w '%{http_code}\n' https://www.example.com   # 期望 200/2xx(代理可用)
+curl '<订阅URL>'                                  # 期望 200，base64
 ```
 
-## 4. 证书自动续期
-
-Caddy automatic HTTPS 内置 ACME 自动续期，无需 cron。确保证书目录持久、80 端口可被 LE 访问即可。
-
-## 5. 卸载
+## 6. 卸载
 
 ```bash
-sudo bash uninstall.sh
+sudo bash flowbrowse.sh uninstall       # 保留配置/证书；菜单会询问是否 --purge
 ```
 
-## 6. 安全
+## 7. 安全
 
-- 真实口令只存在于 `/etc/flowbrowse/.env`（权限 600），不入仓库、不入记忆、不入日志。
-- 转发代理强制 BasicAuth，避免开放代理滥用。
-- 建议后续为 `/_flowbrowse/*` 接口配 fail2ban / 速率限制。
+- 真实口令/token 只在服务器 `/etc/flowbrowse/.env`（600），不入仓库/记忆/日志。
+- 代理强制 BasicAuth，未授权一律 407，端口不表现为开放代理（也抵御扫描探测）。
+- 订阅走"密钥目录/随机文件名"，未知路径 404，整条 URL 不可猜以防嗅探/枚举。

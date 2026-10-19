@@ -4,6 +4,7 @@ import { probeRtt } from '../lib/probe.js';
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg || msg.target !== 'offscreen') return; // 非本上下文的消息直接忽略
+  if (msg.type === 'ping') { sendResponse({ pong: true }); return; } // 供 SW 确认 offscreen 监听已就绪
   if (msg.type === 'probe') {
     // 异步探测：返回 true 保持消息通道，待 Promise 完成后 sendResponse
     probeRtt(msg.host, msg.wtPort)

@@ -127,6 +127,15 @@ id -u flowbrowse >/dev/null 2>&1 || useradd --system --home-dir /var/lib/flowbro
 mkdir -p "${DATA_DIR}" "${FB_CERT_CACHE}" "${FB_WEB_ROOT}"
 chown -R flowbrowse:flowbrowse "${DATA_DIR}" "${FB_CERT_CACHE}"
 
+# quic-go 官方建议调大 UDP 接收/发送缓冲区，否则 WebTransport(QUIC) 握手 Initial 包易丢→"Opening handshake failed"
+cat > /etc/sysctl.d/99-flowbrowse.conf <<'SYSCTL'
+net.core.rmem_max = 7550000
+net.core.rmem_default = 7550000
+net.core.wmem_max = 7550000
+SYSCTL
+sysctl --system >/dev/null 2>&1 || true
+log "已设置 UDP 缓冲区(sysctl)以保障 QUIC 握手"
+
 install -m 644 "${SCRIPT_DIR}/systemd/flowbrowse.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable flowbrowse >/dev/null 2>&1 || true

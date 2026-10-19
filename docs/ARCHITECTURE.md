@@ -5,14 +5,14 @@
 ```
                          ┌───────────────────────── 远程服务器 (sel2.lkz.pub / 193.123.230.166) ─────────────────────────┐
                          │                                                                                              │
-  Chrome 扩展 (MV3)      │   Caddy (TCP 443)                     Go WebTransport 服务 (UDP 443)                        │
+  Chrome 扩展 (MV3)      │   flowbrowse-server (TCP 443)         同进程 WebTransport (UDP 443)                        │
  ┌────────────────┐      │  ┌───────────────────────            ┌──────────────────────────┐                         │
  │ 标签页全部流量  │──────┼─▶│ ① 普通访问 / → 空200(复刻Caddy) │  ③ /wt  WebTransport 会话 │  真 QUIC / h3          │
  │ (chrome.proxy) │ TCP  │  │ ② CONNECT/绝对形式 → HTTPS 转发代理│     probe / session 流     │  (测速/信令/加速)      │
  └────────────────┘  443 │  └───────────────────────            │  /<token>/<随机名> 订阅      │                        │
         ▲                │        │  BasicAuth 鉴权             └──────────────────────────┘                        │
         │  ② 主干通道     │        │                                 ▲ ③ QUIC 通道(offscreen WebTransport)          │
-        │  全量接管+分流  │   Let's Encrypt 证书 (automatic HTTPS 自动续期)  │                                       │
+        │  全量接管+分流  │   Let's Encrypt 证书 (程序内 autocert 自动签发/续期)  │                                       │
  ┌──────┴───────┐        │        │                                 │                                              │
  │ popup/options│        │   订阅地址: fb://USER:PASS@sel2.lkz.pub:443/?udp=443&region=&name=                       │
  │ offscreen(WT)│        └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -22,8 +22,8 @@
 ## 2. 通道职责
 
 ### 主干通道（全量接管，TCP）
-- 扩展用 `chrome.proxy.settings.set` 配置 PAC 脚本，把"非中国"流量指向 `sel2.lkz.pub:443` 的 Caddy HTTPS 转发代理。
-- Caddy 对 CONNECT 与绝对形式请求做转发代理；对普通 origin 请求，根路径 `respond "" 200` 返回空 200（逐字节复刻原生 Caddy 默认，无自定义页），订阅走密钥路径静态文件。
+- 扩展用 `chrome.proxy.settings.set` 配置 PAC 脚本，把"非中国"流量指向 `<域名>:443` 的 HTTPS 转发代理（单一 Go 服务，ALPN=http/1.1，Chrome 原生兼容）。
+- 服务端对 CONNECT 与绝对形式请求做转发代理(BasicAuth 鉴权)；对普通 origin 请求，根路径返回空 200（逐字节等同未配置的 Caddy 默认，无自定义页，防指纹），订阅走密钥路径静态文件。
 - 覆盖 http/https/ftp/wss。**这一跳是 TCP+TLS，不是 QUIC**——这是 Chrome 平台的硬约束。
 
 ### QUIC 通道（应用层，UDP/h3）
@@ -57,4 +57,4 @@
 - `extension/lib/`：config / rules / proxy-manager / auth / node-manager / subscription / probe —— 各管一职。
 - `extension/background/service-worker.js`：编排、状态持久化与重建、alarms 周期探测、维持 offscreen。
 - `extension/offscreen/`：WebTransport 宿主。
-- `server/`：Caddyfile、webtransport(Go)、install/uninstall/status、scripts/gen-sub-link、systemd、config。
+- `server/`：`flowbrowse/`(单一 Go 主程序:代理+站点+订阅+WebTransport+autocert)、`install/uninstall/status/flowbrowse.sh`、`scripts/gen-sub-link`、`systemd/flowbrowse.service`、`config/.env.example`。（已移除 Caddy/NaiveProxy 依赖。）

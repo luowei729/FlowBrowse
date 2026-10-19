@@ -4,11 +4,11 @@
 
 ## 架构决策（路线 3 混合方案）
 
-- **主干通道**：`chrome.proxy` → 远程 Caddy HTTPS 转发代理（TCP 443，TLS 到 `sel2.lkz.pub`）。全量接管 http/https/ftp/wss 页面流量，零本地客户端。
+- **主干通道**：`chrome.proxy` → 远程单一 Go 服务的 HTTPS 转发代理（TCP 443，TLS，ALPN=http/1.1）。全量接管 http/https/ftp/wss 页面流量，零本地客户端。
 - **QUIC 通道**：offscreen 文档内 WebTransport（UDP 443，h3/QUIC）连远程 Go 服务，用于节点测速/健康探测/信令，及实验性白名单域名 h3 加速（Phase 4）。
 - **分流**：浏览器侧 PAC 脚本，依据内置中国域名/IP CIDR 判定 国内→DIRECT、其余→PROXY。
 - **订阅**：服务端输出借鉴 hy2 格式的 `fb://` 链接 + base64 订阅接口；插件粘贴订阅地址即导入节点。
-- **证书**：Caddy automatic HTTPS（Let's Encrypt）签发与自动续期；域名未生效导致失败时中文日志提示。
+- **证书**：服务端程序内 autocert（Let's Encrypt HTTP-01）自动签发与续期；域名未生效导致失败时中文日志提示。（已去 Caddy。）
 
 ## 阶段划分与状态
 
@@ -25,7 +25,7 @@
 
 ## 交付物清单
 
-- server/：`install.sh` `uninstall.sh` `status.sh` `Caddyfile` `webtransport/{main.go,go.mod}` `scripts/gen-sub-link.sh` `systemd/*.service` `config/.env.example`
+- server/：`install.sh` `uninstall.sh` `status.sh` `flowbrowse.sh` `flowbrowse/{main.go,go.mod}` `scripts/gen-sub-link.sh` `systemd/flowbrowse.service` `config/.env.example`（单一 Go 服务，已去 Caddy）
 - extension/：`manifest.json` `lib/*` `background/service-worker.js` `offscreen/*` `popup/*` `options/*` `rules/*` `icons/*`
 - 文档：根目录 5 个 md + docs/{ARCHITECTURE,THREAT_MODEL,RULES_FORMAT,SERVER_DEPLOY}.md
 

@@ -53,10 +53,24 @@ async function maybeRemoveOffscreen() {
   }
 }
 
+// 等待 offscreen 文档的 onMessage 监听就绪（刚 createDocument 会有竞态，用 ping 往返确认）
+async function waitForOffscreenReady() {
+  for (let i = 0; i < 25; i++) {
+    try {
+      const pong = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'ping' });
+      if (pong && pong.pong) return true;
+    } catch (_) { /* 监听未就绪，重试 */ }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
+}
+
 // 向 offscreen 发起一次 RTT 探测并回传结果
 async function probeNode(node, settings) {
   const wtPort = effectiveWtPort(node, settings);
   await ensureOffscreen();
+  const ready = await waitForOffscreenReady();
+  if (!ready) return { ok: false, error: 'offscreen 未就绪' };
   const res = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'probe', host: node.proxy.host, wtPort });
   return res || { ok: false, error: 'offscreen 无响应' };
 }

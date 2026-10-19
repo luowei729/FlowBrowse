@@ -20,3 +20,20 @@
 - 【扩展】完成 MV3 全量：manifest、lib(config/rules/proxy-manager/auth/node-manager/subscription/probe)、service-worker、offscreen、popup、options、内置 CN 规则。主干 PAC 用 `HTTPS host:port` 保证 TLS；订阅/节点支持多订阅多节点的增删改、刷新、手动选节点、端口自定义。
 - 【验证】所有扩展 JS 通过 node ESM 语法校验；manifest JSON 合法；生成的 PAC 通过 node --check；parseFbLink 与 gen-sub-link 编码/解析往返单测通过；4 个 shell 脚本 bash -n 通过。
 - 【一致性】按最终"路径式订阅 + 空200默认页"同步更新 ARCHITECTURE / RULES_FORMAT / THREAT_MODEL / SERVER_DEPLOY / DEVTIPS。
+
+## 2026-10-20（真机联调 + 架构改为单一 Go 服务）
+
+- 【重大变更】部署联调中发现 Caddy 的 klzgrad/NaiveProxy forward_proxy fork **不兼容 Chrome 原生 https 代理**（CONNECT-over-TLS 隧道重置；且拦截全站导致首页/订阅 407）。经隔离测试定位为 fork 本质限制。
+- 【重构】服务端从"Caddy + 独立 Go WebTransport"改为**单一 Go 程序** `server/flowbrowse`：
+  - 标准 HTTPS 转发代理(TCP443, ALPN=http/1.1, CONNECT+绝对形式+BasicAuth恒定时间比较) — Chrome 原生兼容；
+  - 同端口托管：根路径空 200(防指纹) + 密钥路径订阅静态文件(非代理请求不需代理鉴权)；
+  - WebTransport(UDP443)；autocert 自动申请/续期 LE 证书(去掉 Caddy 依赖)。
+  - 删除 server/caddy、server/systemd/{caddy,wt,reload}，新增 flowbrowse.service 单单元。
+- 【快速脚本】`flowbrowse.sh` 菜单/子命令改为单服务(install/uninstall/status/restart/sub/renew/logs/info)；install.sh 支持预编译下载(GitHub Actions)+回退编译、按 amd64/arm64 自动选、覆盖前停服务、UDP 缓冲区 sysctl。
+- 【GitHub Actions】`.github/workflows/build.yml`：按 tag 交叉编译 linux amd64/arm64 单一二进制并发布 Release；服务器纯下载不编译。
+- 【真实服务器验证通过】在 193.123.230.166 / sel2.lkz.pub 实测：
+  - 首页 GET→200 空body；无凭据 CONNECT→407；有凭据 CONNECT example→200、gstatic→204（转发真实可用）；
+  - 错误 token→404（防枚举）；autocert 成功签发 LE 证书；UDP443 WebTransport 监听。
+  - 真实 Chrome 内核端到端：导入真机订阅→connect→chrome.proxy=pac_script 生效→断开还原，全通过。
+- 【遗留】WebTransport 探测在本沙箱报 "Opening handshake failed"（服务器无任何 QUIC 会话日志 + TCP 全通、UDP 不达），判定为**沙箱出站 UDP/443 受限**，非代码问题；需在用户本机真实 Chrome 复核。offscreen 探测已加 ping 就绪等待修复竞态。
+- 【go.mod 坑】注释行 `#` 被 Go 1.26 mod 解析拒绝，已去除注释；Actions 曾因此失败。
