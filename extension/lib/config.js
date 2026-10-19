@@ -10,6 +10,10 @@ export const KEYS = {
   RUNTIME: 'fb_runtime',     // 运行态：是否已连接、最近探测结果
 };
 
+// 代理凭据在 storage 中的键：auth.js 的 onAuthRequired 读它注入 Proxy-Authorization。
+// 集中放这里，避免 proxy-manager 与 auth 互相 import 造成循环依赖。
+export const PROXY_AUTH_KEY = 'fb_proxy_auth';
+
 // ===== 设置默认值：首次运行或字段缺失时兜底 =====
 export const DEFAULT_SETTINGS = {
   mode: 'split',             // 'off' 关闭 | 'global' 全局 | 'split' 智能分流（默认）

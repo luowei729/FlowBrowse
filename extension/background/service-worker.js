@@ -5,13 +5,15 @@
 
 import { loadAll, getSettings, setSettings, setRuntime } from '../lib/config.js';
 import { applyProxy, clearProxy, resolveActive } from '../lib/proxy-manager.js';
-import { registerAuthListener } from '../lib/auth.js';
+import { registerAuthListener, initAuthFromStorage } from '../lib/auth.js';
 import * as nodeMgr from '../lib/node-manager.js';
 import * as subMgr from '../lib/subscription.js';
 import { effectiveWtPort } from '../lib/config.js';
 
 // ===== 顶层同步注册鉴权监听器（一次性，不能放在异步里）=====
 registerAuthListener();
+// SW 每次唤醒都从 storage 预热代理凭据到内存，保证休眠重启后 onAuthRequired 仍能同步注入
+initAuthFromStorage();
 
 // ===== 组装返回给 UI 的完整状态（不含内部敏感字段之外的信息）=====
 async function buildState() {

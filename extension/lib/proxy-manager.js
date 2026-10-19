@@ -1,10 +1,8 @@
 // proxy-manager.js —— 应用/清除 chrome.proxy（PAC 模式）
 // 职责边界：只负责"把配置翻译成 chrome.proxy 调用"，不碰节点/规则细节（那些在各自模块）。
-import { loadAll, effectiveProxy } from './config.js';
+import { loadAll, effectiveProxy, PROXY_AUTH_KEY } from './config.js';
 import { buildPac, loadCnData } from './rules.js';
-
-// 代理凭据在 storage 中的键：auth.js 的 onAuthRequired 会读它注入 Proxy-Authorization
-export const PROXY_AUTH_KEY = 'fb_proxy_auth';
+import { setProxyCreds, clearProxyCreds } from './auth.js';
 
 // 应用代理：根据当前节点与模式生成 PAC 并写入 chrome.proxy
 // 返回可读状态文本，供上层展示
@@ -34,11 +32,14 @@ export async function applyProxy(node, settings) {
     scope: 'regular',
   });
 
-  // 暂存代理凭据给 auth.js；无凭据则清除旧值
+  // 暂存代理凭据：写 storage（持久）+ 同步刷新 auth 内存缓存（供 onAuthRequired 同步注入）
   if (p.user) {
-    await chrome.storage.local.set({ [PROXY_AUTH_KEY]: { username: p.user, password: p.pass, host: p.host } });
+    const creds = { username: p.user, password: p.pass, host: p.host };
+    await chrome.storage.local.set({ [PROXY_AUTH_KEY]: creds });
+    setProxyCreds(creds);
   } else {
     await chrome.storage.local.remove(PROXY_AUTH_KEY);
+    clearProxyCreds();
   }
 
   return `已连接：${node.name} (${p.host}:${p.port}) · ${settings.mode === 'global' ? '全局' : '分流'}`;
@@ -48,6 +49,7 @@ export async function applyProxy(node, settings) {
 export async function clearProxy() {
   await chrome.proxy.settings.clear({ scope: 'regular' });
   await chrome.storage.local.remove(PROXY_AUTH_KEY);
+  clearProxyCreds(); // 同步清内存缓存，避免断开后仍注入旧凭据
   return '已断开，恢复系统直连';
 }
 
