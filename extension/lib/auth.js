@@ -6,18 +6,18 @@ import { PROXY_AUTH_KEY } from './proxy-manager.js';
 export function registerAuthListener() {
   chrome.webRequest.onAuthRequired.addListener(
     (details) => {
-      // 仅处理代理发起的认证挑战；其它 401 不拦截
-      if (details.isProxy) {
-        return chrome.storage.local.get(PROXY_AUTH_KEY).then((data) => {
-          const creds = data[PROXY_AUTH_KEY];
-          if (creds && creds.username) {
-            // 返回 authCredentials → Chrome 自动带上 Proxy-Authorization: Basic ...
-            return { authCredentials: { username: creds.username, password: creds.password } };
-          }
-          return {}; // 无凭据：让挑战自然失败（服务器返回 407）
-        });
-      }
-      return {};
+      // 关键修正：不再用 details.isProxy 做门槛。
+      // 原因：对 https 代理的 CONNECT 鉴权挑战，isProxy 在部分 Chrome 版本为 undefined/false，
+      //       旧逻辑会直接返回 {} 导致 Chrome 弹框要账号密码。改为：只要本地存有代理凭据就注入。
+      return chrome.storage.local.get(PROXY_AUTH_KEY).then((data) => {
+        const creds = data[PROXY_AUTH_KEY];
+        if (creds && creds.username) {
+          // 返回 authCredentials → Chrome 自动带上 Proxy-Authorization: Basic ...（静默鉴权，不弹框）
+          return { authCredentials: { username: creds.username, password: creds.password } };
+        }
+        // 无凭据：让挑战自然失败（服务器 407），不弹框打扰
+        return {};
+      });
     },
     { urls: ['<all_urls>'] }
     // MV3：不传 extraInfoSpec（无 blocking），靠返回 Promise 提供凭据

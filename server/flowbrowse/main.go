@@ -168,7 +168,11 @@ func challenge407(w http.ResponseWriter) {
 
 // ===== CONNECT 隧道：鉴权→拨号目标→回 200→双向裸拷贝 =====
 func handleConnect(w http.ResponseWriter, r *http.Request, cfg config) {
-	if !authOK(r, cfg) {
+	authed := authOK(r, cfg)
+	// 诊断日志：记录来源、目标、是否带鉴权头、鉴权结果，便于定位 Chrome 与 curl 的差异
+	log.Printf("[FlowBrowse-PROXY] CONNECT from=%s target=%s hasProxyAuth=%v hasAuth=%v authed=%v",
+		r.RemoteAddr, r.Host, r.Header.Get("Proxy-Authorization") != "", r.Header.Get("Authorization") != "", authed)
+	if !authed {
 		challenge407(w)
 		return
 	}
