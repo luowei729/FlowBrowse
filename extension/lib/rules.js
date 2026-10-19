@@ -115,7 +115,7 @@ function FindProxyForURL(url, host) {
   const nets = toNetPairs(cnData.cidrs);
   return `
 // ==== FlowBrowse auto-generated split PAC (do not edit by hand) ====
-var CN_DOMAINS = ${js(cnData.domains)};
+var CN_SET = new Set(${js(cnData.domains)});
 var CN_NETS = ${js(nets)}; // [base, mask] precomputed
 
 // Convert dotted IPv4 to a 32-bit unsigned integer (host only)
@@ -141,13 +141,15 @@ function inCnCidr(host) {
   return false;
 }
 
-// Whether a host matches a CN domain suffix (exact + subdomain)
+// Match host against the CN domain set by walking parent domains.
+// Fast: O(#labels) hash lookups, scales to 100k+ entries. e.g. www.douyin.com -> douyin.com(hit) ; x.cn -> cn(hit).
 function inCnDomain(host) {
   host = host.toLowerCase();
-  for (var i = 0; i < CN_DOMAINS.length; i++) {
-    var d = CN_DOMAINS[i].toLowerCase().replace(/^\\./, '');
-    if (d === '') continue;
-    if (host === d || host.length > d.length && host.slice(-d.length - 1) === '.' + d) return true;
+  while (true) {
+    if (CN_SET.has(host)) return true;
+    var i = host.indexOf('.');
+    if (i < 0) break;
+    host = host.slice(i + 1);
   }
   return false;
 }

@@ -71,3 +71,10 @@
 - 【换 IP 自动回白名单】新增 **IP 心跳**：连接时每 2 分钟直连拉一次订阅 URL，服务器重新登记当前客户端 IP（TTL 续期）。配套：PAC 将代理域名本身设为 DIRECT（控制面直连），避免心跳绕经代理导致服务器只看到 127.0.0.1。
 - 【验证】e2e 全绿；`allowlist.json` 含真实客户端 IP（非 127.0.0.1）；服务端 CONNECT 日志收敛为“仅被拒时记一行安全事件”（不落凭据）。
 - 【默认】`FB_PROXY_ALLOW=on`、`FB_PROXY_AUTH=off`。
+
+## 2026-10-20（分流准确率：内置全量 CN 域名表 + Set 父域匹配）
+
+- 【根因】“很多国内流量走代理”：PAC 只能拿域名、geoip 段对域名请求无效；旧内置域名表仅 ~150 条，大量国内站/CDN 未覆盖。
+- 【为何不用 dnsResolve 分流】在 PAC 里 `dnsResolve` 会把境外目标变成**本地明文 DNS 查询**→ GFW 看到目标域名，等于把 HTTPS 代理藏起来的目标又泄露，自废武功。故坚持按域名判定、不本地解析。
+- 【方案】内置表换为 **geosite:cn Suffix/Plain 全量 109919 条**（含显式 TLD cn/com.cn 等）；`rules.js` 域匹配改为 **Set 父域逐层查找**（O(标签数) 哈希，11 万条仍快）。
+- 【实测】Chrome 接受 1.76MB PAC（`chrome.proxy.set` ok）；sf-express.com/深层子域/x.cn/CN IP→DIRECT，google/youtube/8.8.8.8→代理均正确。
