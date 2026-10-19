@@ -1,37 +1,34 @@
 #!/usr/bin/env bash
-# status.sh —— FlowBrowse 运行状态自检
-# 作用：一眼看清 caddy/wt 服务状态、证书是否就绪、订阅是否可达，便于排障（按 DEVTIPS 的排查顺序）。
+# status.sh —— FlowBrowse 运行状态自检（单一服务端）
+# 作用：一眼看清服务状态、端口、首页/订阅/健康检查可达性，便于排障（证书由程序内 autocert 管理）。
 set -uo pipefail
 ENV_FILE="/etc/flowbrowse/.env"
 [ -f "${ENV_FILE}" ] && { set -a; . "${ENV_FILE}"; set +a; } || echo "[FlowBrowse] 未找到 ${ENV_FILE}，可能尚未安装。"
 
-DOMAIN="${DOMAIN:-}"; FB_TCP_PORT="${FB_TCP_PORT:-443}"; FB_WT_PORT="${FB_WT_PORT:-443}"
+DOMAIN="${DOMAIN:-}"; FB_TCP_PORT="${FB_TCP_PORT:-443}"; FB_WT_PORT="${FB_WT_PORT:-443}"; FB_ACME_PORT="${FB_ACME_PORT:-80}"
 NODE_TOKEN="${NODE_TOKEN:-}"; FB_SUB_FILE="${FB_SUB_FILE:-}"
 
-echo "===== systemd 服务状态 ====="
-for u in flowbrowse-caddy flowbrowse-wt flowbrowse-wt-reload.timer; do
-  printf '%-28s : %s\n' "${u}" "$(systemctl is-active "${u}" 2>/dev/null || echo unknown)"
-done
+echo "===== 服务状态 ====="
+printf '%-24s : %s\n' "flowbrowse" "$(systemctl is-active flowbrowse 2>/dev/null || echo unknown)"
 
-echo "===== 证书状态（Caddy 数据目录）====="
-CERT="${FB_CERT:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt}"
-if [ -f "${CERT}" ]; then
-  echo "证书文件存在：${CERT}"
-  openssl x509 -in "${CERT}" -noout -subject -dates 2>/dev/null || echo "openssl 解析证书失败"
+echo "===== 端口监听 ====="
+ss -ltnp "sport = :${FB_TCP_PORT}" 2>/dev/null | tail -n +2 | head -1 || echo "TCP ${FB_TCP_PORT} 未监听"
+ss -lunp "sport = :${FB_WT_PORT}"  2>/dev/null | tail -n +2 | head -1 || echo "UDP ${FB_WT_PORT} 未监听"
+ss -ltnp "sport = :${FB_ACME_PORT}" 2>/dev/null | tail -n +2 | head -1 || echo "TCP ${FB_ACME_PORT}(ACME) 未监听"
+
+echo "===== 证书(autocert 缓存目录) ====="
+CACHE="${FB_CERT_CACHE:-/var/lib/flowbrowse/certcache}"
+if ls "${CACHE}"/*"${DOMAIN}"* >/dev/null 2>&1 || [ -n "$(ls -A "${CACHE}" 2>/dev/null)" ]; then
+  echo "证书缓存非空：${CACHE}（autocert 已申请证书）"
 else
-  echo "[FlowBrowse] 证书尚未生成：${CERT}"
-  echo "常见原因：域名 ${DOMAIN} 未解析生效 / TCP 80 被占用 / ACME 邮箱无效。请检查：journalctl -u flowbrowse-caddy --no-pager | tail -40"
+  echo "[FlowBrowse] 证书缓存为空：${CACHE}，多为域名未解析或 80 不可达。查看：journalctl -u flowbrowse -n 40 --no-pager"
 fi
 
-echo "===== 站点与订阅可达性 ====="
-echo "-- 默认页（应与原生 Caddy 一致：200 空 body）--"
-curl -sS -o /dev/null -w 'HTTP %{http_code}  size=%{size_download} bytes\n' "https://${DOMAIN}:${FB_TCP_PORT}/" || echo "访问失败"
+echo "===== 站点/订阅/健康可达性 ====="
+echo "-- 默认页(应 200 空 body，复刻原生 Caddy) --"
+curl -sS -m 10 -o /dev/null -w "GET / => HTTP %{http_code} size=%{size_download}\n" "https://${DOMAIN}:${FB_TCP_PORT}/" || echo "访问失败"
 if [ -n "${NODE_TOKEN}" ] && [ -n "${FB_SUB_FILE}" ]; then
-  echo "-- 订阅地址 --"
-  curl -sS -o /dev/null -w 'HTTP %{http_code}  size=%{size_download} bytes\n' "https://${DOMAIN}:${FB_TCP_PORT}/${NODE_TOKEN}/${FB_SUB_FILE}" || echo "订阅访问失败"
+  curl -sS -m 10 -o /dev/null -w "订阅 => HTTP %{http_code} size=%{size_download}\n" "https://${DOMAIN}:${FB_TCP_PORT}/${NODE_TOKEN}/${FB_SUB_FILE}" || echo "订阅访问失败"
 fi
-
-echo "===== WebTransport /healthz（h3，需支持 http3 的 curl）====="
-curl -sS --http3 -o /dev/null -w 'HTTP %{http_code}\n' "https://${DOMAIN}:${FB_WT_PORT}/healthz" 2>/dev/null || echo "http3 探测不可用或端口未就绪（UDP ${FB_WT_PORT}）"
-
+curl -sS -m 10 --http3 -o /dev/null -w "healthz(h3) => HTTP %{http_code}\n" "https://${DOMAIN}:${FB_WT_PORT}/healthz" 2>/dev/null || echo "h3 healthz 探测不可用(UDP ${FB_WT_PORT})"
 echo "完成。"

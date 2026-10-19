@@ -38,10 +38,10 @@ act_status() { bash "${SCRIPT_DIR}/status.sh"; }
 
 act_restart() {
   need_root
-  log "重启 Caddy 与 WebTransport ..."
-  systemctl restart flowbrowse-caddy flowbrowse-wt
+  log "重启 FlowBrowse 服务 ..."
+  systemctl restart flowbrowse
   sleep 1
-  systemctl --no-pager --full status flowbrowse-caddy flowbrowse-wt | grep -E "Active:|Main PID:" || true
+  systemctl --no-pager --full status flowbrowse | grep -E "Active:|Main PID:" || true
   log "完成。"
 }
 
@@ -51,34 +51,28 @@ act_sub() {
   load_env || die "未找到 ${ENV_FILE}，请先安装。"
   log "重新生成订阅文件与链接 ..."
   bash "${SCRIPT_DIR}/scripts/gen-sub-link.sh"
-  [ -n "${FB_WEB_ROOT:-}" ] && chown -R caddy:caddy "${FB_WEB_ROOT}" 2>/dev/null || true
+  [ -n "${FB_WEB_ROOT:-}" ] && chown -R flowbrowse:flowbrowse "${FB_WEB_ROOT}" 2>/dev/null || true
 }
 
-# 证书：重启 caddy 触发 automatic HTTPS 申请/续期；随后重启 wt 让其加载最新证书
+# 证书：autocert 在程序内自动申请/续期；重启服务即可触发重新申请（域名生效时）
 act_renew() {
   need_root
-  log "触发证书申请/续期（重启 caddy 与 wt）..."
-  systemctl restart flowbrowse-caddy
-  sleep 2
-  systemctl restart flowbrowse-wt
+  log "重启服务以触发 autocert 申请/续期 ..."
+  systemctl restart flowbrowse
+  sleep 3
   if load_env; then
-    local cert="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
-    if [ -f "${cert}" ]; then
-      log "证书已就绪："; openssl x509 -in "${cert}" -noout -subject -dates
+    cache="${FB_CERT_CACHE:-/var/lib/flowbrowse/certcache}"
+    if [ -n "$(ls -A "${cache}" 2>/dev/null)" ]; then
+      log "证书缓存非空(${cache})，autocert 已管理证书。"
     else
-      warn "证书尚未生成：多为域名未解析或 80 端口不可达。检查：journalctl -u flowbrowse-caddy -n 40 --no-pager"
+      warn "证书缓存为空：多为域名未解析或 80 不可达。检查：journalctl -u flowbrowse -n 40 --no-pager"
     fi
   fi
 }
 
 act_logs() {
   need_root
-  local which="${1:-caddy}"
-  case "${which}" in
-    caddy) journalctl -u flowbrowse-caddy -n 50 --no-pager ;;
-    wt)    journalctl -u flowbrowse-wt -n 50 --no-pager ;;
-    *)     journalctl -u flowbrowse-caddy -u flowbrowse-wt -n 50 --no-pager ;;
-  esac
+  journalctl -u flowbrowse -n 50 --no-pager
 }
 
 # 显示当前配置摘要（脱敏：口令/token 只提示存在与否，不打印明文）
@@ -104,10 +98,10 @@ menu() {
     echo "  1) 安装 / 更新     (调用 install.sh)"
     echo "  2) 卸载           (调用 uninstall.sh)"
     echo "  3) 状态自检       (调用 status.sh)"
-    echo "  4) 重启服务       (caddy + webtransport)"
+    echo "  4) 重启服务       (单一 flowbrowse 进程)"
     echo "  5) 重新生成订阅   (写入订阅文件并打印链接)"
-    echo "  6) 申请/续期证书  (重启 caddy 触发 ACME)"
-    echo "  7) 查看日志       (caddy / wt)"
+    echo "  6) 申请/续期证书  (重启服务触发 autocert)"
+    echo "  7) 查看日志       (flowbrowse)"
     echo "  8) 查看当前配置   (脱敏摘要)"
     echo "  0) 退出"
     echo "======================================================="
@@ -119,7 +113,7 @@ menu() {
       4) act_restart ;;
       5) act_sub ;;
       6) act_renew ;;
-      7) read -r -p "看哪个日志 (caddy/wt/all，默认 caddy): " j; act_logs "${j:-caddy}" ;;
+      7) act_logs ;;
       8) act_info ;;
       0) echo "再见。"; break ;;
       *) warn "无效选择" ;;
@@ -136,7 +130,7 @@ case "${1:-}" in
   restart)   act_restart ;;
   sub)       act_sub ;;
   renew)     act_renew ;;
-  logs)      act_logs "${2:-caddy}" ;;
+  logs)      act_logs ;;
   info)      act_info ;;
   "")        menu ;;
   *)         die "未知子命令：${1}（可用 install|uninstall|status|restart|sub|renew|logs|info，或留空进入菜单）" ;;
