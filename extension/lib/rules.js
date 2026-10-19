@@ -101,6 +101,8 @@ export function buildPac(proxyHost, proxyPort, mode, cnData) {
   if (mode === 'global') {
     return `
 function FindProxyForURL(url, host) {
+  // Control plane: the proxy server's own host must go DIRECT so subscription/heartbeat reach it with the real client IP.
+  if (host === '${proxyHost}') return 'DIRECT';
   if (isPlainHostName(host) || host === '127.0.0.1' || host === 'localhost') return 'DIRECT';
   if (shExpMatch(host, '10.*') || shExpMatch(host, '192.168.*') || shExpMatch(host, '172.16.*')) return 'DIRECT';
   return '${proxyLine}';
@@ -151,6 +153,8 @@ function inCnDomain(host) {
 }
 
 function FindProxyForURL(url, host) {
+  // Control plane: proxy server's own host goes DIRECT so subscription/heartbeat carry the real client IP (not looped via proxy).
+  if (host === '${proxyHost}') return 'DIRECT';
   // Local / loopback / private ranges always connect directly
   if (isPlainHostName(host) || host === '127.0.0.1' || host === 'localhost' || host === '::1') return 'DIRECT';
   if (shExpMatch(host, '10.*') || shExpMatch(host, '192.168.*') ||

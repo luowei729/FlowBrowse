@@ -4,7 +4,7 @@
 // 关键约束：监听器必须顶层同步注册；SW 会休眠，故状态一律以 chrome.storage 为准，唤醒即用最新值。
 // 架构：已放弃 QUIC/WebTransport，代理走 TCP 443（chrome.proxy HTTPS），无需 offscreen。
 
-import { loadAll, getSettings, setSettings, setRuntime } from '../lib/config.js';
+import { loadAll, getSettings, setSettings, setRuntime, getSubs } from '../lib/config.js';
 import { applyProxy, clearProxy, resolveActive } from '../lib/proxy-manager.js';
 import { registerAuthListener, initAuthFromStorage } from '../lib/auth.js';
 import { probeLatency } from '../lib/probe.js';
@@ -64,13 +64,28 @@ async function recordProbe(nodeId, r) {
   await setRuntime({ lastProbe: runtime.lastProbe });
 }
 
-// ===== alarms：周期探测当前节点 =====
+// ===== IP 心跳：连接期间定时直连拉一次订阅，让服务器重新登记当前客户端 IP（解决换 IP 自动回白名单）=====
+async function heartbeatSubs() {
+  const subs = await getSubs();
+  // 并发向每个订阅 URL 发一个轻量 GET（PAC 已把代理域名设为 DIRECT，故走直连带真实 IP）；忽略结果
+  await Promise.all((subs || []).map((s) => fetch(s.url + (s.url.includes('?') ? '&' : '?') + 'hb=1', { cache: 'no-store', credentials: 'omit' }).catch(() => {})));
+}
+
+// ===== alarms：周期探测当前节点 + IP 心跳 =====
 async function scheduleProbe() {
   const s = await getSettings();
   const period = Math.max(1, s.probeIntervalMinutes || 10);
   chrome.alarms.create('fb-probe', { periodInMinutes: period });
 }
+async function scheduleHeartbeat() {
+  chrome.alarms.create('fb-hb', { periodInMinutes: 2 }); // 每 2 分钟上报一次 IP
+}
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'fb-hb') {
+    const { settings } = await loadAll();
+    if (settings.mode !== 'off') await heartbeatSubs();
+    return;
+  }
   if (alarm.name !== 'fb-probe') return;
   const { node, settings } = await resolveActive();
   if (settings.mode === 'off' || !node) return;
@@ -93,6 +108,8 @@ async function doConnect(nodeId) {
   updateIcon(true);
   startKeepAlive(); // 连接期间保持 SW 活跃，鉴权更稳
   await scheduleProbe();
+  await scheduleHeartbeat(); // 启动 IP 心跳
+  heartbeatSubs().catch(() => {}); // 连接即上报一次 IP
   probeNode(node).then((r) => recordProbe(node.id, r)).catch(() => {});
   return statusText;
 }
@@ -103,6 +120,7 @@ async function doDisconnect() {
   updateIcon(false);
   stopKeepAlive();
   chrome.alarms.clear('fb-probe');
+  chrome.alarms.clear('fb-hb');
 }
 
 // ===== 消息路由 =====
@@ -127,6 +145,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             await setRuntime({ connected: false, statusText: '未连接（模式：关闭）' });
             updateIcon(false);
             stopKeepAlive();
+            chrome.alarms.clear('fb-hb');
           } else {
             await reapplyIfConnected();
           }

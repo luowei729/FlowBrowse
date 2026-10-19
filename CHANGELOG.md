@@ -64,3 +64,10 @@
 - 【方案】改用 **自动 IP 白名单**：拉到有效订阅 URL（密钥路径即凭证）的客户端 IP 自动放行（TTL 30天、持久化 allowlist.json）；仅作用于代理。默认 `FB_PROXY_ALLOW=on`、`FB_PROXY_AUTH=off`。
 - 【验证 v0.4.0】服务端：仅监听 443+80；未拉订阅 CONNECT→403、拉订阅后 CONNECT→200；首页 200 空。无头 Chrome 端到端：导入订阅→连接→经代理访问 example.com=200 **无弹框**。
 - 【UI】popup/options 重写为深色高级主题（渐变/卡片/状态胶囊）；工具栏角标 ON/OFF 一眼判开关；内置全量 CN IP 段 + 补字节跳动/抖音等域名修“抖音走代理”。
+
+## 2026-10-20（v0.4.2 仅用户名鉴权实测 + IP 心跳自动上报）
+
+- 【实测定论】用户追问“仅用户名”能否鉴权。服务端加 CONNECT 诊断日志后无头实测：Chrome 发来的 CONNECT **`hasAuth=false`**——即 `onAuthRequired` 虽触发并返回正确凭据，**Chrome 对 HTTPS 代理根本不上送任何 Proxy-Authorization 头**（与用户名/密码无关）。确认 HTTPS 代理下密码/用户名鉴权均不可行；HTTP 明文代理虽可行但会暴露目标+凭据，不可取。
+- 【换 IP 自动回白名单】新增 **IP 心跳**：连接时每 2 分钟直连拉一次订阅 URL，服务器重新登记当前客户端 IP（TTL 续期）。配套：PAC 将代理域名本身设为 DIRECT（控制面直连），避免心跳绕经代理导致服务器只看到 127.0.0.1。
+- 【验证】e2e 全绿；`allowlist.json` 含真实客户端 IP（非 127.0.0.1）；服务端 CONNECT 日志收敛为“仅被拒时记一行安全事件”（不落凭据）。
+- 【默认】`FB_PROXY_ALLOW=on`、`FB_PROXY_AUTH=off`。

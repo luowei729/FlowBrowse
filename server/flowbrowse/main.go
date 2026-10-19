@@ -126,24 +126,21 @@ func newRootHandler(cfg config, al *allowList) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1) CONNECT = 转发代理请求
 		if r.Method == http.MethodConnect {
-			// 临时鉴权诊断：只记录“是否带凭据/凭据长度/校验结果”，不落任何密钥明文
-			pa := r.Header.Get("Proxy-Authorization")
-			if pa == "" {
-				pa = r.Header.Get("Authorization")
-			}
-			authLen := 0
-			if strings.HasPrefix(pa, "Basic ") {
-				if d, e := base64.StdEncoding.DecodeString(strings.TrimPrefix(pa, "Basic ")); e == nil {
-					authLen = len(d)
+			allowed := al.allowed(r)
+			authed := authOK(r, cfg)
+			// 只在“被拒”时记一行安全事件（不落任何凭据明文，只记是否带头），便于排查滥用/掉线
+			if !allowed || !authed {
+				pa := r.Header.Get("Proxy-Authorization")
+				if pa == "" {
+					pa = r.Header.Get("Authorization")
 				}
+				log.Printf("[CONNECT拒绝] from=%s target=%s allowed=%v authOK=%v hasAuth=%v", clientIP(r), r.Host, allowed, authed, pa != "")
 			}
-			log.Printf("[CONNECT] from=%s target=%s hasAuth=%v authLen=%d allowed=%v authOK=%v",
-				clientIP(r), r.Host, pa != "", authLen, al.allowed(r), authOK(r, cfg))
-			if !al.allowed(r) {
+			if !allowed {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
-			if !authOK(r, cfg) {
+			if !authed {
 				challenge407(w)
 				return
 			}
