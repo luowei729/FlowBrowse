@@ -22,13 +22,14 @@ export async function initAuthFromStorage() {
 export function registerAuthListener() {
   chrome.webRequest.onAuthRequired.addListener(
     (details) => {
-      // 诊断日志：打印真机上代理鉴权挑战的关键信息，便于定位为何弹框
+      // 诊断日志
       console.log('[FlowBrowse][auth] onAuthRequired isProxy=' + details.isProxy + ' hasCreds=' + !!(cachedCreds && cachedCreds.username) + ' url=' + details.url);
-      // 同步返回：只要内存里有凭据就注入（不再用 isProxy 做门槛，避免真机 isProxy 为假时漏注入）。
+      // MV3 关键：onAuthRequired 需返回 Promise 才会被 Chrome 采纳（同步返回对象会被忽略）。
+      // 无凭据时 resolve({}) 让挑战自然失败，不弹框。
       if (cachedCreds && cachedCreds.username) {
-        return { authCredentials: { username: cachedCreds.username, password: cachedCreds.password } };
+        return Promise.resolve({ authCredentials: { username: cachedCreds.username, password: cachedCreds.password } });
       }
-      return {};
+      return Promise.resolve({});
     },
     { urls: ['<all_urls>'] }
     // MV3：同步返回对象即可，无需 extraInfoSpec
