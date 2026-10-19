@@ -1,0 +1,98 @@
+// config.js —— chrome.storage 读写与数据模型层
+// 为什么单独成模块：MV3 的 Service Worker 随时休眠、内存态不可靠，所有状态必须落 chrome.storage；
+// 这里统一封装读写与默认值合并，其它模块只依赖本层，避免各自直接操作 storage 造成格式漂移。
+
+// ===== 存储键（集中定义，防止拼写不一致）=====
+export const KEYS = {
+  SETTINGS: 'fb_settings',   // 用户设置：模式、当前节点、端口覆盖等
+  NODES: 'fb_nodes',         // 节点数组（手动 + 订阅导入）
+  SUBS: 'fb_subs',           // 订阅数组（可增删改、更新）
+  RUNTIME: 'fb_runtime',     // 运行态：是否已连接、最近探测结果
+};
+
+// ===== 设置默认值：首次运行或字段缺失时兜底 =====
+export const DEFAULT_SETTINGS = {
+  mode: 'split',             // 'off' 关闭 | 'global' 全局 | 'split' 智能分流（默认）
+  activeNodeId: null,        // 当前选中/连接的节点 id（手动选择节点）
+  portOverrideTcp: null,     // 主干 TCP 端口覆盖（null=用节点自带）；域名/端口均可自定义
+  portOverrideUdp: null,     // WebTransport UDP 端口覆盖（null=用节点自带）
+  autoConnectOnStartup: false,
+  probeIntervalMinutes: 10,  // 周期探测间隔
+  rulesRemoteEnabled: false, // 是否允许从远程更新分流规则
+  rulesRemoteUrlDomains: '', // 远程 CN 域名列表 URL
+  rulesRemoteUrlCidrs: '',   // 远程 CN IP CIDR 列表 URL
+};
+
+// ===== 运行态默认值 =====
+export const DEFAULT_RUNTIME = {
+  connected: false,
+  statusText: '未连接',
+  lastProbe: {},             // { [nodeId]: { rttMs, ok, at } }
+};
+
+// 读整包（一次取齐，减少异步次数）
+export async function loadAll() {
+  const data = await chrome.storage.local.get(Object.values(KEYS));
+  return {
+    settings: { ...DEFAULT_SETTINGS, ...(data[KEYS.SETTINGS] || {}) },
+    nodes: data[KEYS.NODES] || [],
+    subs: data[KEYS.SUBS] || [],
+    runtime: { ...DEFAULT_RUNTIME, ...(data[KEYS.RUNTIME] || {}) },
+  };
+}
+
+// 局部写入：仅覆盖传入的键，避免并发读整包再写导致相互覆盖
+export async function setSettings(patch) {
+  const cur = (await chrome.storage.local.get(KEYS.SETTINGS))[KEYS.SETTINGS] || {};
+  const next = { ...DEFAULT_SETTINGS, ...cur, ...patch };
+  await chrome.storage.local.set({ [KEYS.SETTINGS]: next });
+  return next;
+}
+export async function getSettings() {
+  const cur = (await chrome.storage.local.get(KEYS.SETTINGS))[KEYS.SETTINGS] || {};
+  return { ...DEFAULT_SETTINGS, ...cur };
+}
+
+export async function saveNodes(nodes) {
+  await chrome.storage.local.set({ [KEYS.NODES]: nodes });
+  return nodes;
+}
+export async function getNodes() {
+  return (await chrome.storage.local.get(KEYS.NODES))[KEYS.NODES] || [];
+}
+
+export async function saveSubs(subs) {
+  await chrome.storage.local.set({ [KEYS.SUBS]: subs });
+  return subs;
+}
+export async function getSubs() {
+  return (await chrome.storage.local.get(KEYS.SUBS))[KEYS.SUBS] || [];
+}
+
+export async function setRuntime(patch) {
+  const cur = (await chrome.storage.local.get(KEYS.RUNTIME))[KEYS.RUNTIME] || {};
+  const next = { ...DEFAULT_RUNTIME, ...cur, ...patch };
+  await chrome.storage.local.set({ [KEYS.RUNTIME]: next });
+  return next;
+}
+
+// 生成短 id：节点/订阅都需要稳定标识，用于选择、去重与级联删除
+export function genId(prefix = 'n') {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// 从节点解析出"生效的代理主机与 TCP 端口"（考虑端口覆盖，域名完全来自节点，不硬编码）
+export function effectiveProxy(node, settings) {
+  return {
+    host: node.proxy.host,
+    port: settings.portOverrideTcp || node.proxy.port || 443,
+    scheme: node.proxy.scheme || 'https',
+    user: node.proxy.user || '',
+    pass: node.proxy.pass || '',
+  };
+}
+
+// WebTransport 生效端口（可自定义 UDP）
+export function effectiveWtPort(node, settings) {
+  return settings.portOverrideUdp || node.wtPort || 443;
+}

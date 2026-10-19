@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!--
+  popup.html —— 一键连接面板
+  设计：把"最常用的动作"放在弹窗（连接/断开、选节点、选模式、看延迟、端口覆盖）；
+  节点与订阅的完整增删改放 options 页，保持弹窗轻。所有数据都经 SW 消息路由，UI 不直接碰存储，避免状态漂移。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>FlowBrowse</title>
+</head>
+<body>
+  <header class="bar">
+    <span class="brand">FlowBrowse</span>
+    <span id="dot" class="dot off"></span>
+    <span id="status" class="status">加载中…</span>
+  </header>
+
+  <section class="row">
+    <label for="nodeSel">节点</label>
+    <select id="nodeSel"></select>
+  </section>
+
+  <section class="row">
+    <label for="modeSel">模式</label>
+    <select id="modeSel">
+      <option value="split">智能分流（国内直连）</option>
+      <option value="global">全局代理</option>
+      <option value="off">关闭</option>
+    </select>
+  </section>
+
+  <section class="row cols">
+    <label>TCP端口
+      <input id="tcpPort" type="number" min="1" max="65535" placeholder="节点默认" />
+    </label>
+    <label>UDP端口(WebTransport)
+      <input id="udpPort" type="number" min="1" max="65535" placeholder="节点默认" />
+    </label>
+  </section>
+
+  <section class="btns">
+    <button id="connectBtn" class="primary">连接</button>
+    <button id="probeBtn" class="ghost">测速</button>
+    <button id="settingsBtn" class="ghost">设置</button>
+  </section>
+
+  <footer class="foot">
+    <span id="rtt" class="rtt"></span>
+    <a href="#" id="openOptions">节点 / 订阅管理 →</a>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

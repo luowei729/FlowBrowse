@@ -1,0 +1,24 @@
+# FlowBrowse WebTransport 服务单元
+# 作用：提供 UDP 端口（默认 443，可自定义）上的 QUIC/HTTP3 WebTransport 服务，供扩展测速/信令。
+#       复用 Caddy 签发的同一套证书（FB_CERT/FB_KEY 由 install.sh 指向 Caddy 数据目录）。
+[Unit]
+Description=FlowBrowse WebTransport (QUIC / HTTP/3)
+After=network-online.target flowbrowse-caddy.service
+Wants=network-online.target
+
+[Service]
+# 以 caddy 用户运行，可直接读取 Caddy 数据目录里属主为 caddy 的证书私钥
+User=caddy
+Group=caddy
+EnvironmentFile=/etc/flowbrowse/.env
+ExecStart=/opt/flowbrowse/bin/flowbrowse-wt
+# 首次运行证书可能尚未签发完成；always + RestartSec 让服务受控重试直至证书就绪
+Restart=always
+RestartSec=10
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

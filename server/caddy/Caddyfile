@@ -1,0 +1,45 @@
+# FlowBrowse Caddyfile —— TCP 443 单站点三用（域名/端口/凭据全部来自环境变量，零硬编码）
+#
+# 设计（见 docs/ARCHITECTURE.md）：同一个 HTTPS 站点同时提供三类响应，靠 global `order` 区分处理顺序：
+#   1) 转发代理：CONNECT / 绝对形式请求 → 供 Chrome chrome.proxy 主干接管（basic_auth 鉴权、hide_ip/hide_via 隐藏转发特征）
+#   2) 订阅接口：安装时生成的静态文件，放在“密钥目录/随机文件名”下（$NODE_TOKEN/$FB_SUB_FILE 均不可猜），仅知道完整 URL 者能拉取
+#   3) 默认首页：原生 Caddy 没有自带 HTML 欢迎页，未配置内容的站点根路径返回“0 字节 200 空响应”。
+#      故本配置对 / 直接 `respond "" 200`，与原生 Caddy 默认行为逐字节一致，杜绝自定义页带来的指纹差异（防嗅探）。
+#
+# 证书：automatic HTTPS 自动签发并续期 Let's Encrypt；证书被写入 Caddy 数据目录，
+#       Go WebTransport 服务通过 FB_CERT/FB_KEY 复用同一套证书（见 systemd 单元与 docs）。
+
+{
+	# forward_proxy 需在 file_server 之前执行，才能先拦截代理请求，其余普通流量再落到静态站点
+	order forward_proxy before file_server
+
+	# ACME 注册邮箱（用于 LE 证书），来自环境变量，可自定义
+	email {$ACME_EMAIL}
+}
+
+# 站点地址：域名与 TCP 端口均可自定义（$FB_TCP_PORT 默认 443）
+{$DOMAIN}:{$FB_TCP_PORT} {
+	# 静态根（仅供密钥子目录下的订阅文件命中，站点内不放任何自定义首页文件）
+	root * {$FB_WEB_ROOT}
+
+	route {
+		# —— ① 转发代理（主干通道）——
+		# 隐蔽性（防嗅探/防探测）三层：
+		#   a) Chrome 原生 https 代理：CONNECT/绝对形式请求全程在“到自有域名的 TLS”内密文传输，
+		#      链路中间人(GFW)只看到“在访问本站”，读不到被代理目标 → 内容级嗅探由 TLS 解决。
+		#   b) basic_auth：无凭据的 CONNECT 一律 407，端口永不表现为开放代理，主动扫描无法确认证据。
+		#   c) hide_ip/hide_via：不泄露 Via / X-Forwarded-For / 服务端身份。
+		# 注：故意不配置 access log，避免在服务端记录 CONNECT 目标域名造成二次泄露。
+		forward_proxy {
+			basic_auth {$AUTH_USER} {$AUTH_PASS}
+			hide_ip
+			hide_via
+		}
+
+		# —— ③ 默认首页：/ 返回空 200，复刻原生 Caddy 默认行为（无欢迎页），防指纹被嗅探 ——
+		respond / "" 200
+
+		# —— ② 其余路径：仅“密钥目录/随机文件名”可命中订阅文件，其它一律 404 ——
+		file_server
+	}
+}

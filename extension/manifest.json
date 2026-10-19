@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "FlowBrowse",
+  "version": "0.1.0",
+  "description": "零本地客户端的浏览器代理：HTTP/3·QUIC·WebTransport 通道 + 远程 HTTPS 转发代理，支持节点订阅、国内外规则分流与一键连接。",
+
+  "permissions": [
+    "proxy",
+    "storage",
+    "alarms",
+    "offscreen",
+    "webRequest"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "FlowBrowse 一键连接"
+  },
+
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  }
+}

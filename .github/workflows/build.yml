@@ -1,0 +1,83 @@
+name: build-binaries
+
+# 触发：推送 v* 版本 tag（如 v0.1.0）或手动触发。产物为双架构预编译二进制并发布到 GitHub Release，
+# 供服务器 install.sh 直接下载（免本地编译）。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64]
+    env:
+      GO_VERSION: "1.24"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # ---- 构建带 forwardproxy 的 Caddy（纯 Go，可交叉编译）----
+      - name: Install xcaddy
+        run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+      - name: Build Caddy (linux/${{ matrix.goarch }})
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.goarch }} \
+          xcaddy build \
+            --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive \
+            --output flowbrowse-caddy-linux-${{ matrix.goarch }}
+        working-directory: ${{ github.workspace }}
+
+      # ---- 构建 WebTransport 服务（纯 Go）----
+      - name: Build WebTransport (linux/${{ matrix.goarch }})
+        run: |
+          go mod tidy
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.goarch }} \
+          go build -o ${{ github.workspace }}/flowbrowse-wt-linux-${{ matrix.goarch }} .
+        working-directory: ${{ github.workspace }}/server/webtransport
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flowbrowse-linux-${{ matrix.goarch }}
+          path: |
+            flowbrowse-caddy-linux-${{ matrix.goarch }}
+            flowbrowse-wt-linux-${{ matrix.goarch }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      # 展平目录：把 dist/<name>/<file> 里的二进制移到统一目录供 release 上传
+      - name: Flatten
+        run: |
+          mkdir -p out
+          find dist -type f -name 'flowbrowse-*' -exec cp {} out/ \;
+          ls -l out
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/flowbrowse-caddy-linux-amd64
+            out/flowbrowse-caddy-linux-arm64
+            out/flowbrowse-wt-linux-amd64
+            out/flowbrowse-wt-linux-arm64
+          generate_release_notes: true

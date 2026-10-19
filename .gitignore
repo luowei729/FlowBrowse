@@ -1,0 +1,26 @@
+# 敏感配置绝不入库
+.env
+/etc/flowbrowse/
+server/config/.env
+*.pem
+*.key
+*.crt
+
+# Go 构建产物
+server/webtransport/flowbrowse-wt
+server/bin/
+/opt/flowbrowse/
+
+# Node / 打包
+node_modules/
+dist/
+*.log
+
+# 编辑器/系统
+.DS_Store
+.idea/
+.vscode/
+
+# 本地测试产物与工具缓存（不入库）
+.selftest/
+.codegraph/

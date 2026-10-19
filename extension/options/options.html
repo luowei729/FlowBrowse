@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  options.html —— FlowBrowse 管理页
+  功能域：订阅管理（多订阅：添加/重命名/刷新/删除） + 节点管理（多节点：手动添加/编辑/删除、选为当前） + 分流规则远程更新 + 通用设置。
+  原则：所有写操作都经 SW 消息路由，保证与运行时行为一致（例如连接中改端口会即时生效）。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowBrowse 设置</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>FlowBrowse 设置</h1>
+
+    <!-- ===== 订阅管理 ===== -->
+    <section class="card">
+      <h2>订阅管理 <span class="muted">（支持多个订阅：配置 / 更新 / 删除）</span></h2>
+      <form id="subForm" class="inline">
+        <input id="subName" type="text" placeholder="订阅名称（可选）" />
+        <input id="subUrl" type="text" placeholder="粘贴订阅地址（如 https://域名/令牌/随机名）" required />
+        <button type="submit" class="primary">添加 / 更新订阅</button>
+      </form>
+      <div class="rowbtns">
+        <button id="refreshAll" class="ghost">刷新全部订阅</button>
+      </div>
+      <ul id="subList" class="list"></ul>
+    </section>
+
+    <!-- ===== 节点管理 ===== -->
+    <section class="card">
+      <h2>节点管理 <span class="muted">（支持多个节点：自定义添加 / 编辑 / 删除 / 手动选择）</span></h2>
+      <form id="nodeForm" class="grid">
+        <input type="hidden" id="nodeId" />
+        <label>名称<input id="nName" type="text" placeholder="我的节点" /></label>
+        <label>地区<input id="nRegion" type="text" placeholder="SG" /></label>
+        <label>代理域名/IP<input id="nHost" type="text" placeholder="sel2.lkz.pub" required /></label>
+        <label>TCP端口<input id="nTcp" type="number" min="1" max="65535" placeholder="443" /></label>
+        <label>UDP端口(WT)<input id="nUdp" type="number" min="1" max="65535" placeholder="443" /></label>
+        <label>用户名<input id="nUser" type="text" placeholder="BasicAuth 用户" /></label>
+        <label>密码<input id="nPass" type="text" placeholder="BasicAuth 密码" /></label>
+        <div class="full rowbtns">
+          <button type="submit" class="primary" id="nodeSubmit">添加节点</button>
+          <button type="button" class="ghost" id="nodeCancel" hidden>取消编辑</button>
+        </div>
+      </form>
+      <ul id="nodeList" class="list"></ul>
+    </section>
+
+    <!-- ===== 分流规则 ===== -->
+    <section class="card">
+      <h2>分流规则 <span class="muted">（默认用内置列表；可指向远程 geosite/geoip 更新）</span></h2>
+      <label class="check"><input id="rulesRemoteEnabled" type="checkbox" /> 启用远程规则更新</label>
+      <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="https://…/geosite_cn_domains.txt" /></label>
+      <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://…/geoip_cn_cidrs.txt" /></label>
+      <p class="muted">来源建议：Loyalsoldier/v2ray-rules-dat（geosite.dat category:cn、geoip.dat country:cn 派生的纯文本）。</p>
+    </section>
+
+    <!-- ===== 通用设置 ===== -->
+    <section class="card">
+      <h2>通用设置</h2>
+      <label class="check"><input id="autoConnect" type="checkbox" /> 浏览器启动时自动连接上次节点</label>
+      <label>探测间隔（分钟）<input id="probeInterval" type="number" min="1" max="1440" placeholder="10" /></label>
+    </section>
+
+    <div class="savebar">
+      <button id="saveSettings" class="primary">保存规则与设置</button>
+      <span id="msg" class="muted"></span>
+    </div>
+  </main>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

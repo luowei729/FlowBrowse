@@ -1,0 +1,60 @@
+/* popup.css —— FlowBrowse 弹窗样式（轻量、暗色状态点，贴合浏览器扩展尺寸） */
+body {
+  width: 320px;
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #1f2933;
+  background: #f6f7f9;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #e4e7eb;
+}
+.brand { font-weight: 700; letter-spacing: .3px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #cbd2d9; }
+.dot.on { background: #2f9e44; box-shadow: 0 0 0 3px rgba(47,158,68,.18); }
+.dot.off { background: #cbd2d9; }
+.status { flex: 1; color: #52606d; font-size: 12px; }
+
+.row { padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+.row.cols { gap: 10px; }
+.row label { color: #52606d; white-space: nowrap; }
+select, input[type="number"] {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #cbd2d9;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+input[type="number"] { max-width: 96px; }
+
+.btns { display: flex; gap: 8px; padding: 8px 12px; }
+button {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+button.primary { background: #1c7ed6; color: #fff; }
+button.primary.disconnect { background: #e03131; }
+button.ghost { background: #fff; border-color: #cbd2d9; color: #334; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px 12px;
+  border-top: 1px solid #e4e7eb;
+  background: #fff;
+}
+.rtt { color: #52606d; }
+.foot a { color: #1c7ed6; text-decoration: none; }

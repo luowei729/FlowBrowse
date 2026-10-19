@@ -1,0 +1,8 @@
+# 每周重启 WebTransport 服务一次，以便加载 Caddy 自动续期后的新证书
+# 原因：Go 服务在启动时读取证书；LE 约 60 天续期，每周重启足以覆盖续期窗口，无需改代码做热加载。
+[Unit]
+Description=FlowBrowse WebTransport cert refresh (reload renewed certificate)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl try-restart flowbrowse-wt.service
