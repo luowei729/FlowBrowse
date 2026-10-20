@@ -1,154 +1,169 @@
-// options.js —— 管理页逻辑：订阅/节点 CRUD + 规则远程更新 + 通用设置；全部经 SW 消息路由
+// options.js —— Zero Omega 风格管理页：左侧栏分页 SPA。所有写操作经 SW 消息，保证与运行时一致。
 const $ = (id) => document.getElementById(id);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 function send(msg) {
-  return new Promise((res) => chrome.runtime.sendMessage(msg, (r) => res(r || { ok: false, error: '后台无响应' })));
+  return new Promise((resolve) => chrome.runtime.sendMessage(msg, (resp) => resolve(resp || { ok: false, error: '后台无响应' })));
 }
-// HTML 文本转义：节点/订阅名可能含用户输入，防 XSS 注入到管理页
-function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-function fmtTime(ms) { return ms ? new Date(ms).toLocaleString('zh-CN') : '—'; }
-function btn(label, variant, onClick) {
-  const b = document.createElement('button');
-  b.className = 'small ' + (variant || 'ghost');
-  b.textContent = label;
-  b.addEventListener('click', onClick);
-  return b;
-}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 let STATE = null;
 
-async function refresh() {
-  const resp = await send({ action: 'getState' });
-  if (!resp.ok) { $('msg').textContent = resp.error || '后台未就绪'; return; }
-  render(resp.state);
+// ===== 左侧栏切换 =====
+$$('#nav a').forEach((a) => {
+  a.addEventListener('click', () => {
+    $$('#nav a').forEach((x) => x.classList.toggle('active', x === a));
+    $$('.page').forEach((p) => { p.hidden = p.dataset.page !== a.dataset.page; });
+  });
+});
+
+// ===== 渲染：情景模式（代理节点表格）=====
+function renderProfiles(state) {
+  const { settings, nodes, runtime } = state;
+  const active = settings.activeProfile || (settings.mode === 'off' ? 'direct' : (settings.mode === 'global' ? 'node:' + settings.activeNodeId : 'auto'));
+  const tbody = $('profileRows');
+  tbody.innerHTML = '';
+  if (!nodes.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">暂无代理情景模式，点上方“添加代理情景模式”或到“订阅”导入。</td></tr>';
+    return;
+  }
+  for (const n of nodes) {
+    const tr = document.createElement('tr');
+    const p = runtime.lastProbe && runtime.lastProbe[n.id];
+    const lat = p ? (p.ok ? ` · ${p.latencyMs}ms` : ' · 不可达') : '';
+    const badges = [];
+    if (active === 'node:' + n.id) badges.push('<span class="badge cur">当前</span>');
+    if (settings.autoNodeId === n.id) badges.push('<span class="badge def">默认代理</span>');
+    if (n.source === 'subscribe') badges.push('<span class="badge sub">订阅</span>');
+    tr.innerHTML =
+      `<td>${esc(n.name)}</td>` +
+      `<td>${esc((n.proxy.scheme || 'https').toUpperCase())}</td>` +
+      `<td>${esc(n.proxy.host)}:${n.proxy.port}</td>` +
+      `<td>${esc(n.region || '')}${lat}</td>` +
+      `<td>${badges.join(' ') || '<span class="muted">—</span>'}</td>` +
+      `<td><div class="ops"></div></td>`;
+    const ops = tr.querySelector('.ops');
+    ops.append(
+      btn('设为默认代理', 'link', () => send({ action: 'selectNode', id: n.id }).then(apply)),
+      btn('编辑', 'link', () => openNodeForm(n)),
+      btn('删除', 'link danger', () => { if (confirm(`删除「${n.name}」？`)) send({ action: 'deleteNode', id: n.id }).then(apply); })
+    );
+    tbody.append(tr);
+  }
 }
+function btn(text, cls, fn) { const b = document.createElement('button'); b.textContent = text; b.className = cls; b.addEventListener('click', fn); return b; }
 
-function render(state) {
-  STATE = state;
-  const { settings, nodes, subs, runtime } = state;
-
-  // —— 订阅列表 ——
-  const sl = $('subList');
-  sl.innerHTML = '';
-  if (!subs.length) sl.innerHTML = '<li class="muted">暂无订阅，粘贴订阅地址即可添加</li>';
+// ===== 渲染：订阅列表 =====
+function renderSubs(state) {
+  const { subs } = state;
+  const ul = $('subList');
+  ul.innerHTML = '';
+  if (!subs.length) { ul.innerHTML = '<li class="muted">暂无订阅</li>'; return; }
   for (const s of subs) {
     const li = document.createElement('li');
-    const info = document.createElement('div');
-    info.className = 'info';
-    info.innerHTML = `<div class="title">${esc(s.name)}</div><div class="sub">${esc(s.url)}</div>` +
-      `<div class="sub">上次更新 ${fmtTime(s.lastRefresh)} · 节点数 ${(s.nodeKeys || []).length}</div>`;
-    li.append(info);
+    const head = document.createElement('div'); head.className = 'sub-head';
+    head.innerHTML = `<b>${esc(s.name)}</b><span class="muted">${esc(s.url)}</span>`;
+    li.append(head);
     li.append(
-      btn('刷新', 'ghost', () => send({ action: 'refreshSubscription', id: s.id }).then(refresh)),
-      btn('删除', 'danger', () => { if (confirm('删除该订阅及其导入的节点？')) send({ action: 'deleteSubscription', id: s.id }).then(refresh); })
+      btn('刷新', 'link', () => send({ action: 'refreshSubscription', id: s.id }).then(apply)),
+      btn('删除', 'link danger', () => { if (confirm(`删除订阅「${s.name}」及其节点？`)) send({ action: 'deleteSubscription', id: s.id }).then(apply); })
     );
-    sl.append(li);
+    ul.append(li);
   }
+}
 
-  // —— 节点列表 ——
-  const nl = $('nodeList');
-  nl.innerHTML = '';
-  if (!nodes.length) nl.innerHTML = '<li class="muted">暂无节点，可手动添加或从订阅导入</li>';
-  for (const n of nodes) {
-    const active = n.id === settings.activeNodeId;
-    const p = runtime.lastProbe && runtime.lastProbe[n.id];
-    const rtt = p ? (p.ok ? ` · ${p.rttMs}ms` : ' · QUIC✕') : '';
-    const li = document.createElement('li');
-    const info = document.createElement('div');
-    info.className = 'info';
-    const tagCur = active ? '<span class="tag">当前</span> ' : '';
-    const tagSrc = `<span class="tag ${n.source === 'subscribe' ? 'subs' : ''}">${n.source === 'subscribe' ? '订阅' : '手动'}</span>`;
-    info.innerHTML = `<div class="title">${esc(n.name)} ${tagCur}${tagSrc}</div>` +
-      `<div class="sub">${esc(n.proxy.host)}:${n.proxy.port}${n.region ? ' · ' + esc(n.region) : ''}${esc(rtt)}</div>`;
-    li.append(info);
-    const bSel = btn(active ? '已选中' : '选为当前', 'ghost', () => send({ action: 'selectNode', id: n.id }).then(refresh));
-    if (active) bSel.disabled = true;
-    li.append(
-      bSel,
-      btn('编辑', 'ghost', () => fillNodeForm(n)),
-      btn('删除', 'danger', () => { if (confirm('删除该节点？')) send({ action: 'deleteNode', id: n.id }).then(refresh); })
-    );
-    nl.append(li);
-  }
-
-  // —— 设置回填 ——
+// ===== 渲染：规则/通用回填 =====
+function renderForms(state) {
+  const { settings } = state;
   $('rulesRemoteEnabled').checked = !!settings.rulesRemoteEnabled;
   $('rulesUrlDomains').value = settings.rulesRemoteUrlDomains || '';
   $('rulesUrlCidrs').value = settings.rulesRemoteUrlCidrs || '';
-  $('autoConnect').checked = !!settings.autoConnectOnStartup;
   $('probeInterval').value = settings.probeIntervalMinutes || 10;
 }
 
-// ===== 订阅：添加/更新（同名 url 会更新并重新拉取节点）=====
-$('subForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const url = $('subUrl').value.trim();
-  const name = $('subName').value.trim();
-  if (!url) return;
-  $('msg').textContent = '拉取订阅中…';
-  const resp = await send({ action: 'addSubscription', name, url });
-  $('msg').textContent = resp.ok ? '订阅已导入' : ('订阅失败：' + resp.error);
-  if (resp.ok) { $('subUrl').value = ''; $('subName').value = ''; await refresh(); }
-});
-$('refreshAll').addEventListener('click', async () => {
-  $('msg').textContent = '刷新全部订阅中…';
-  await send({ action: 'refreshAllSubscriptions' });
-  $('msg').textContent = '已刷新';
-  refresh();
-});
+async function apply() {
+  const resp = await send({ action: 'getState' });
+  if (resp && resp.ok) { STATE = resp.state; renderProfiles(STATE); renderSubs(STATE); renderForms(STATE); }
+}
 
-// ===== 节点：表单 =====
-function fillNodeForm(n) {
-  $('nodeId').value = n.id;
-  $('nName').value = n.name || '';
-  $('nRegion').value = n.region || '';
-  $('nHost').value = n.proxy.host || '';
-  $('nTcp').value = n.proxy.port || '';
-  $('nUser').value = n.proxy.user || '';
-  $('nPass').value = n.proxy.pass || '';
-  $('nodeSubmit').textContent = '保存修改';
-  $('nodeCancel').hidden = false;
-  window.scrollTo({ top: $('nodeForm').offsetTop, behavior: 'smooth' });
+// ===== 代理情景模式：新增/编辑表单 =====
+function openNodeForm(n) {
+  $('nodeForm').hidden = false;
+  $('nodeFormTitle').textContent = n ? '编辑代理情景模式' : '添加代理情景模式';
+  $('nodeId').value = n ? n.id : '';
+  $('nName').value = n ? n.name || '' : '';
+  $('nRegion').value = n ? n.region || '' : '';
+  $('nScheme').value = n ? (n.proxy.scheme || 'https') : 'https';
+  $('nHost').value = n ? n.proxy.host || '' : '';
+  $('nTcp').value = n ? n.proxy.port || '' : '443';
+  $('nUser').value = n ? n.proxy.user || '' : '';
+  $('nPass').value = n ? n.proxy.pass || '' : '';
+  $('nodeForm').scrollIntoView({ behavior: 'smooth' });
 }
-function resetNodeForm() {
-  $('nodeForm').reset();
-  $('nodeId').value = '';
-  $('nodeSubmit').textContent = '添加节点';
-  $('nodeCancel').hidden = true;
-}
-$('nodeCancel').addEventListener('click', resetNodeForm);
+function closeNodeForm() { $('nodeForm').hidden = true; $('nodeForm').reset(); $('nodeId').value = ''; }
+$('addProfile').addEventListener('click', () => openNodeForm(null));
+$('nodeCancel').addEventListener('click', closeNodeForm);
 $('nodeForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = {
-    name: $('nName').value.trim(),
+    name: $('nName').value.trim() || $('nHost').value.trim(),
     region: $('nRegion').value.trim(),
     proxy: {
       host: $('nHost').value.trim(),
       port: parseInt($('nTcp').value, 10) || 443,
-      scheme: 'https',
+      scheme: $('nScheme').value || 'https',
       user: $('nUser').value.trim(),
       pass: $('nPass').value,
     },
   };
   const id = $('nodeId').value;
   const resp = await send(id ? { action: 'updateNode', id, input } : { action: 'addNode', input });
-  $('msg').textContent = resp.ok ? '节点已保存' : ('保存失败：' + resp.error);
-  if (resp.ok) { resetNodeForm(); await refresh(); }
+  if (resp && resp.ok) { closeNodeForm(); apply(); } else alert('保存失败：' + (resp && resp.error));
 });
 
-// ===== 规则与通用设置：一次保存 =====
-$('saveSettings').addEventListener('click', async () => {
-  const patch = {
+// ===== 订阅 =====
+$('subForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = $('subUrl').value.trim();
+  if (!url) return;
+  const resp = await send({ action: 'addSubscription', name: $('subName').value.trim(), url });
+  if (resp && resp.ok) { $('subUrl').value = ''; $('subName').value = ''; apply(); } else alert('订阅失败：' + (resp && resp.error));
+});
+$('refreshAll').addEventListener('click', async () => { await send({ action: 'refreshAllSubscriptions' }); apply(); });
+
+// ===== 规则 / 通用 保存 =====
+$('saveRules').addEventListener('click', async () => {
+  await send({ action: 'setSettings', patch: {
     rulesRemoteEnabled: $('rulesRemoteEnabled').checked,
     rulesRemoteUrlDomains: $('rulesUrlDomains').value.trim(),
     rulesRemoteUrlCidrs: $('rulesUrlCidrs').value.trim(),
-    autoConnectOnStartup: $('autoConnect').checked,
-    probeIntervalMinutes: parseInt($('probeInterval').value, 10) || 10,
-  };
-  const resp = await send({ action: 'setSettings', patch });
-  $('msg').textContent = resp.ok ? '已保存' : ('保存失败：' + resp.error);
-  if (resp.ok) refresh();
+  } });
+  $('rulesMsg').textContent = '已保存'; setTimeout(() => ($('rulesMsg').textContent = ''), 1500);
+});
+$('saveGeneral').addEventListener('click', async () => {
+  await send({ action: 'setSettings', patch: { probeIntervalMinutes: parseInt($('probeInterval').value, 10) || 10 } });
+  $('generalMsg').textContent = '已保存'; setTimeout(() => ($('generalMsg').textContent = ''), 1500);
 });
 
-// 初始化 + 存储变化实时刷新
-refresh();
-chrome.storage.onChanged.addListener(() => refresh());
+// ===== 导入 / 导出 =====
+$('exportBtn').addEventListener('click', () => {
+  if (!STATE) return;
+  const data = { version: 1, settings: STATE.settings, nodes: STATE.nodes, subs: STATE.subs };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'flowbrowse-config.json'; a.click();
+  URL.revokeObjectURL(a.href);
+});
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!data || !Array.isArray(data.nodes)) throw new Error('格式不符');
+    await send({ action: 'importConfig', data });
+    $('ioMsg').textContent = '导入成功'; apply();
+  } catch (err) { $('ioMsg').textContent = '导入失败：' + err.message; }
+  e.target.value = '';
+});
+
+apply();
+chrome.storage.onChanged.addListener(() => apply());

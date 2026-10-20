@@ -78,3 +78,13 @@
 - 【为何不用 dnsResolve 分流】在 PAC 里 `dnsResolve` 会把境外目标变成**本地明文 DNS 查询**→ GFW 看到目标域名，等于把 HTTPS 代理藏起来的目标又泄露，自废武功。故坚持按域名判定、不本地解析。
 - 【方案】内置表换为 **geosite:cn Suffix/Plain 全量 109919 条**（含显式 TLD cn/com.cn 等）；`rules.js` 域匹配改为 **Set 父域逐层查找**（O(标签数) 哈希，11 万条仍快）。
 - 【实测】Chrome 接受 1.76MB PAC（`chrome.proxy.set` ok）；sf-express.com/深层子域/x.cn/CN IP→DIRECT，google/youtube/8.8.8.8→代理均正确。
+
+## 2026-10-20（UI 推翻重做：套用 Zero Omega 风格“情景模式”+浅色主题）
+
+- 【需求】用户要求推翻现有 UI，套用 Zero Omega 的 UI 与功能范式，选“连功能范式一起改 + 浅色”。
+- 【功能范式】新增“情景模式”抽象（config.js `profileList`/`resolveProfile`）：`直接连接`/`自动分流`/`每个节点` 统一为可切换项；`settings.activeProfile` 为唯一开关，派生旧 mode+node（兼容旧数据）。SW 新增 `selectProfile`/`applyActiveProfile`，启动即套用当前情景（Zero Omega 式常驻）；connect/disconnect/setMode 保留为映射。
+- 【popup】重写为 Zero Omega 式情景切换列表（当前高亮 + 徒章）+ 齿轮；不再用“连接/断开”按钮。
+- 【options】重写为左侧栏分页 SPA（情景模式/订阅/分流规则/通用/导入导出）+ 代理表格（协议/服务器/地区/状态/操作）；新增导入导出 JSON（SW 加 `importConfig`）。
+- 【主题】popup/options 均改浅色（白底 + #1a73e8 蓝强调），贴近 Zero Omega。
+- 【保留】白名单+心跳、角标 ON/OFF、内置全量规则、Set 父域匹配均不变。
+- 【验证】无头 e2e（导入订阅→connect→example.com=200）全绿；JS 语法均过。

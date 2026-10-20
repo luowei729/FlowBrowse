@@ -4,8 +4,8 @@
 // 关键约束：监听器必须顶层同步注册；SW 会休眠，故状态一律以 chrome.storage 为准，唤醒即用最新值。
 // 架构：已放弃 QUIC/WebTransport，代理走 TCP 443（chrome.proxy HTTPS），无需 offscreen。
 
-import { loadAll, getSettings, setSettings, setRuntime, getSubs } from '../lib/config.js';
-import { applyProxy, clearProxy, resolveActive } from '../lib/proxy-manager.js';
+import { loadAll, getSettings, setSettings, setRuntime, getSubs, resolveProfile, saveNodes, saveSubs } from '../lib/config.js';
+import { applyProxy, clearProxy } from '../lib/proxy-manager.js';
 import { registerAuthListener, initAuthFromStorage } from '../lib/auth.js';
 import { probeLatency } from '../lib/probe.js';
 import * as nodeMgr from '../lib/node-manager.js';
@@ -41,15 +41,36 @@ async function buildState() {
   return { settings, nodes, subs, runtime };
 }
 
-// 仅当"当前已连接"时才重新套用代理（选节点/改端口/存设置后热更新）。
-async function reapplyIfConnected() {
-  const { settings, nodes, runtime } = await loadAll();
-  const node = nodes.find((n) => n.id === settings.activeNodeId);
-  if (runtime.connected && settings.mode !== 'off' && node) {
-    const t = await applyProxy(node, settings);
-    await setRuntime({ connected: true, statusText: t });
-    updateIcon(true);
+// ===== 套用当前情景模式（Zero Omega 范式核心）：根据 activeProfile 派生 mode+node 并应用 =====
+async function applyActiveProfile() {
+  const { settings, nodes } = await loadAll();
+  const { mode, node } = resolveProfile(settings, nodes);
+  if (mode === 'off' || !node) {
+    // 直接连接 / 无可用节点 → 清除代理
+    const t = await clearProxy();
+    await setRuntime({ connected: false, statusText: mode === 'off' ? '直接连接（未走代理）' : '未选择可用节点' });
+    updateIcon(false);
+    stopKeepAlive();
+    chrome.alarms.clear('fb-probe');
+    chrome.alarms.clear('fb-hb');
+    return;
   }
+  const t = await applyProxy(node, { ...settings, mode });
+  await setRuntime({ connected: true, statusText: t });
+  updateIcon(true);
+  startKeepAlive();
+  await scheduleProbe();
+  await scheduleHeartbeat();
+  heartbeatSubs().catch(() => {}); // 立即上报一次 IP
+  probeNode(node).then((r) => recordProbe(node.id, r)).catch(() => {});
+}
+
+// 切换情景模式：设为当前；若选节点则同步为“自动分流”的默认代理
+async function selectProfile(profileId) {
+  const patch = { activeProfile: profileId };
+  if (profileId.startsWith('node:')) patch.autoNodeId = profileId.slice(5);
+  await setSettings(patch);
+  await applyActiveProfile();
 }
 
 // ===== 探测当前节点延迟（经服务器 HTTPS 往返）=====
@@ -82,13 +103,14 @@ async function scheduleHeartbeat() {
 }
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'fb-hb') {
-    const { settings } = await loadAll();
-    if (settings.mode !== 'off') await heartbeatSubs();
+    const { settings, nodes } = await loadAll();
+    if (resolveProfile(settings, nodes).mode !== 'off') await heartbeatSubs();
     return;
   }
   if (alarm.name !== 'fb-probe') return;
-  const { node, settings } = await resolveActive();
-  if (settings.mode === 'off' || !node) return;
+  const { settings, nodes } = await loadAll();
+  const { mode, node } = resolveProfile(settings, nodes);
+  if (mode === 'off' || !node) return;
   try {
     const r = await probeNode(node);
     await recordProbe(node.id, r);
@@ -97,31 +119,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
-// ===== 连接 / 断开 =====
-async function doConnect(nodeId) {
-  const { nodes, settings } = await loadAll();
-  const node = nodes.find((n) => n.id === nodeId);
-  if (!node) throw new Error('节点不存在');
-  const effSettings = await setSettings({ activeNodeId: nodeId, mode: settings.mode === 'off' ? 'split' : settings.mode });
-  const statusText = await applyProxy(node, effSettings);
-  await setRuntime({ connected: true, statusText });
-  updateIcon(true);
-  startKeepAlive(); // 连接期间保持 SW 活跃，鉴权更稳
-  await scheduleProbe();
-  await scheduleHeartbeat(); // 启动 IP 心跳
-  heartbeatSubs().catch(() => {}); // 连接即上报一次 IP
-  probeNode(node).then((r) => recordProbe(node.id, r)).catch(() => {});
-  return statusText;
-}
-
-async function doDisconnect() {
-  const statusText = await clearProxy();
-  await setRuntime({ connected: false, statusText });
-  updateIcon(false);
-  stopKeepAlive();
-  chrome.alarms.clear('fb-probe');
-  chrome.alarms.clear('fb-hb');
-}
+// ===== 连接/断开（兼容旧接口，映射到情景模式切换）=====
+async function doConnect(nodeId) { await selectProfile('node:' + nodeId); }
+async function doDisconnect() { await selectProfile('direct'); }
 
 // ===== 消息路由 =====
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -132,28 +132,31 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       switch (msg && msg.action) {
         case 'getState':
           return sendResponse({ ok: true, state: await buildState() });
+        // 切换情景模式（Zero Omega 核心动作）：'direct' | 'auto' | 'node:<id>'
+        case 'selectProfile':
+          await selectProfile(msg.profileId);
+          return sendResponse({ ok: true, state: await buildState() });
         case 'connect':
           await doConnect(msg.nodeId);
           return sendResponse({ ok: true, state: await buildState() });
         case 'disconnect':
           await doDisconnect();
           return sendResponse({ ok: true, state: await buildState() });
+        // 旧模式接口：映射到情景模式
         case 'setMode': {
-          const s = await setSettings({ mode: msg.mode });
-          if (s.mode === 'off') {
-            await clearProxy();
-            await setRuntime({ connected: false, statusText: '未连接（模式：关闭）' });
-            updateIcon(false);
-            stopKeepAlive();
-            chrome.alarms.clear('fb-hb');
-          } else {
-            await reapplyIfConnected();
+          let ap = 'direct';
+          if (msg.mode === 'split') ap = 'auto';
+          else if (msg.mode === 'global') {
+            const { settings, nodes } = await loadAll();
+            const nid = settings.autoNodeId || settings.activeNodeId || (nodes[0] && nodes[0].id);
+            ap = nid ? 'node:' + nid : 'direct';
           }
+          await selectProfile(ap);
           return sendResponse({ ok: true, state: await buildState() });
         }
         case 'setPorts': {
           await setSettings({ portOverrideTcp: msg.tcp || null });
-          await reapplyIfConnected();
+          await applyActiveProfile();
           return sendResponse({ ok: true, state: await buildState() });
         }
         case 'addNode':
@@ -161,15 +164,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return sendResponse({ ok: true, state: await buildState() });
         case 'updateNode':
           await nodeMgr.updateNode(msg.id, msg.input);
+          await applyActiveProfile(); // 若正在用该节点，热更新
           return sendResponse({ ok: true, state: await buildState() });
         case 'deleteNode':
           await nodeMgr.deleteNode(msg.id);
+          await applyActiveProfile();
           return sendResponse({ ok: true, state: await buildState() });
         case 'addSubscription':
           await subMgr.addOrUpdateSubscription({ name: msg.name, url: msg.url });
           return sendResponse({ ok: true, state: await buildState() });
         case 'deleteSubscription':
           await subMgr.deleteSubscription(msg.id);
+          await applyActiveProfile();
           return sendResponse({ ok: true, state: await buildState() });
         case 'refreshSubscription':
           await subMgr.refreshSubscription(msg.id);
@@ -178,21 +184,31 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           await subMgr.refreshAllSubscriptions();
           return sendResponse({ ok: true, state: await buildState() });
         case 'probeActive': {
-          const { node } = await resolveActive();
+          const { settings, nodes } = await loadAll();
+          const { node } = resolveProfile(settings, nodes);
           if (!node) return sendResponse({ ok: false, error: '无选中节点' });
           const r = await probeNode(node);
           await recordProbe(node.id, r);
           return sendResponse({ ok: true, probe: r, state: await buildState() });
         }
+        // 选择“自动分流”的默认代理节点（不切换当前情景模式）
         case 'selectNode': {
-          await setSettings({ activeNodeId: msg.id });
-          await reapplyIfConnected();
+          await setSettings({ autoNodeId: msg.id, activeNodeId: msg.id });
+          await applyActiveProfile();
           return sendResponse({ ok: true, state: await buildState() });
         }
         case 'setSettings': {
           await setSettings(msg.patch || {});
-          await scheduleProbe();
-          await reapplyIfConnected();
+          await applyActiveProfile(); // 规则/探测间隔等变化后重新套用
+          return sendResponse({ ok: true, state: await buildState() });
+        }
+        // 导入配置：覆盖节点/订阅/设置（options 导入导出用），随后重新套用当前情景模式
+        case 'importConfig': {
+          const d = msg.data || {};
+          if (Array.isArray(d.nodes)) await saveNodes(d.nodes);
+          if (Array.isArray(d.subs)) await saveSubs(d.subs);
+          if (d.settings) await setSettings(d.settings);
+          await applyActiveProfile();
           return sendResponse({ ok: true, state: await buildState() });
         }
         default:
@@ -205,16 +221,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// ===== 安装/启动：注册定时器；同步角标；可选自动连接 =====
+// ===== 安装/启动：Zero Omega 范式——启动即套用当前情景模式（direct 则保持直连，安全）=====
 async function initOnStart() {
-  const { settings, runtime } = await loadAll();
-  const on = runtime.connected && settings.mode !== 'off';
-  updateIcon(on);
-  if (on) startKeepAlive(); // 唤醒后若仍处连接态，恢复 keepalive
-  await scheduleProbe();
-  if (settings.autoConnectOnStartup && settings.activeNodeId) {
-    try { await doConnect(settings.activeNodeId); } catch (e) { console.warn('[FlowBrowse] 自动连接失败', e); }
-  }
+  try { await applyActiveProfile(); }
+  catch (e) { console.warn('[FlowBrowse] 启动套用情景模式失败', e); updateIcon(false); }
 }
 chrome.runtime.onInstalled.addListener(initOnStart);
 chrome.runtime.onStartup.addListener(initOnStart);

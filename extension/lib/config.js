@@ -16,10 +16,13 @@ export const PROXY_AUTH_KEY = 'fb_proxy_auth';
 
 // ===== 设置默认值：首次运行或字段缺失时兜底 =====
 export const DEFAULT_SETTINGS = {
-  mode: 'split',             // 'off' 关闭 | 'global' 全局 | 'split' 智能分流（默认）
-  activeNodeId: null,        // 当前选中/连接的节点 id（手动选择节点）
-  portOverrideTcp: null,     // 主干 TCP 端口覆盖（null=用节点自带）；域名/端口均可自定义
-  portOverrideUdp: null,     // WebTransport UDP 端口覆盖（null=用节点自带）
+  // 情景模式（Zero Omega 范式）：唯一开关。'direct' 直接连接 | 'auto' 自动分流 | 'node:<id>' 全局走某节点
+  activeProfile: 'direct',
+  autoNodeId: null,          // '自动分流' 使用的默认代理节点 id
+  // —— 以下为旧字段，保留做兼容/派生，新逻辑以 activeProfile 为准 ——
+  mode: 'split',             // 'off' | 'global' | 'split'
+  activeNodeId: null,        // 当前选中节点 id
+  portOverrideTcp: null,     // 主干 TCP 端口覆盖（null=用节点自带）
   autoConnectOnStartup: false,
   probeIntervalMinutes: 10,  // 周期探测间隔
   rulesRemoteEnabled: false, // 默认用内置完整规则（已含全量 CN IP 段）；需要自动更新时再开启
@@ -100,4 +103,32 @@ export function effectiveProxy(node, settings) {
 // WebTransport 生效端口（可自定义 UDP）
 export function effectiveWtPort(node, settings) {
   return settings.portOverrideUdp || node.wtPort || 443;
+}
+
+// ===== 情景模式（Zero Omega 范式）抽象 =====
+// 可切换列表：直接连接 + 自动分流 + 每个节点（全局代理到它）
+export function profileList(settings, nodes) {
+  const items = [
+    { id: 'direct', name: '直接连接', type: 'direct' },
+    { id: 'auto', name: '自动分流', type: 'auto' },
+  ];
+  for (const n of nodes) items.push({ id: 'node:' + n.id, name: n.name || n.proxy.host, type: 'proxy', node: n });
+  return items;
+}
+
+// 由 activeProfile 派生出底层所需的 { mode, node }（兼容旧 mode/activeNodeId）
+export function resolveProfile(settings, nodes) {
+  let ap = settings.activeProfile;
+  if (!ap) {
+    // 旧数据迁移：由 mode/activeNodeId 推导
+    ap = settings.mode === 'off' ? 'direct' : (settings.mode === 'global' ? 'node:' + (settings.activeNodeId || '') : 'auto');
+  }
+  if (ap === 'direct') return { mode: 'off', node: null };
+  if (ap === 'auto') {
+    const node = nodes.find((n) => n.id === settings.autoNodeId) || nodes.find((n) => n.id === settings.activeNodeId) || nodes[0] || null;
+    return { mode: 'split', node };
+  }
+  const id = ap.startsWith('node:') ? ap.slice(5) : ap;
+  const node = nodes.find((n) => n.id === id) || null;
+  return { mode: 'global', node };
 }

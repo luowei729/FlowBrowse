@@ -6,53 +6,19 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
+  <!-- Zero Omega 风格：顶部品牌+齿轮，主体为“情景模式”一键切换列表 -->
   <header>
-    <div class="logo">⇄</div>
-    <h1>FlowBrowse</h1>
+    <div class="brand"><span class="logo">⇄</span> FlowBrowse</div>
+    <button id="btnOptions" class="gear" title="打开设置">⚙</button>
   </header>
 
-  <main>
-    <!-- 状态条：一眼看出开/关 -->
-    <div class="status">
-      <span id="statePill" class="pill off">OFF</span>
-      <span id="stateText">未连接</span>
-    </div>
+  <div class="cur">当前情景模式：<b id="curName">直接连接</b></div>
 
-    <!-- 一键连接 / 断开 -->
-    <div class="card">
-      <button id="connectBtn" class="primary">连接</button>
-      <div class="modes">
-        <label class="check"><input type="radio" name="mode" value="global" /> 全局代理</label>
-        <label class="check"><input type="radio" name="mode" value="split" /> 智能分流</label>
-        <label class="check"><input type="radio" name="mode" value="off" /> 关闭</label>
-      </div>
-    </div>
-
-    <!-- 节点选择 -->
-    <div class="card">
-      <h2>节点</h2>
-      <select id="nodeSelect"></select>
-      <div class="row">
-        <button id="btnProbe" class="ghost small">测速</button>
-        <span id="latency" class="muted">--</span>
-      </div>
-    </div>
-
-    <!-- 端口覆盖 -->
-    <div class="card">
-      <h2>端口（留空用节点默认）</h2>
-      <label>代理 TCP 端口<input id="portTcp" type="number" min="1" max="65535" placeholder="443" /></label>
-    </div>
-
-    <!-- 快速节点管理 -->
-    <div class="card">
-      <h2>我的节点</h2>
-      <ul id="nodeList" class="nodes"></ul>
-    </div>
-  </main>
+  <ul id="profileList" class="profiles"></ul>
 
   <footer>
-    <button id="btnOptions" class="ghost">⚙ 管理 / 设置</button>
+    <span id="statusText" class="muted">未连接</span>
+    <button id="btnProbe" class="link" title="测速当前节点">测速</button>
   </footer>
 
   <script src="popup.js" type="module"></script>

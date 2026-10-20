@@ -3,74 +3,105 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FlowBrowse 设置</title>
+  <title>FlowBrowse 选项</title>
   <link rel="stylesheet" href="options.css" />
 </head>
 <body>
-  <header>
-    <div class="logo">⇄</div>
-    <h1>FlowBrowse 设置</h1>
-  </header>
+  <!-- Zero Omega 风格：左侧栏导航 + 右侧内容分页 -->
+  <div class="app">
+    <aside class="sidebar">
+      <div class="side-brand"><span class="logo">⇄</span> FlowBrowse</div>
+      <nav id="nav">
+        <a data-page="profiles" class="active">情景模式</a>
+        <a data-page="subscriptions">订阅</a>
+        <a data-page="rules">分流规则</a>
+        <a data-page="general">通用</a>
+        <a data-page="io">导入/导出</a>
+      </nav>
+      <div class="side-foot">v0.4.x · 单端口 TCP443</div>
+    </aside>
 
-  <main>
-    <!-- ===== 订阅管理 ===== -->
-    <section class="card">
-      <h2>订阅管理 <span class="muted">（多个订阅：配置 / 更新 / 删除）</span></h2>
-      <form id="subForm">
-        <div class="cols">
-          <input id="subName" type="text" placeholder="订阅名称（可选）" />
-          <input id="subUrl" type="text" placeholder="粘贴订阅地址（如 https://域名/令牌/随机名）" required />
+    <main class="content">
+      <!-- ===== 情景模式 ===== -->
+      <section class="page" data-page="profiles">
+        <h2>情景模式</h2>
+        <p class="muted">内置「直接连接」「自动分流」始终可用；下面的代理节点会作为可切换情景出现在弹窗里。点“设为默认代理”决定自动分流走哪个节点。</p>
+        <div class="toolbar">
+          <button id="addProfile" class="primary">+ 添加代理情景模式</button>
         </div>
-        <div class="actions" style="margin-top:12px">
-          <button type="submit" class="primary">添加 / 更新订阅</button>
-          <button type="button" id="refreshAll" class="">刷新全部订阅</button>
+        <table class="grid-table">
+          <thead><tr><th>名称</th><th>协议</th><th>代理服务器</th><th>地区</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody id="profileRows"></tbody>
+        </table>
+
+        <!-- 代理编辑表单（默认隐藏） -->
+        <form id="nodeForm" class="panel" hidden>
+          <h3 id="nodeFormTitle">添加代理情景模式</h3>
+          <input type="hidden" id="nodeId" />
+          <div class="cols">
+            <label>名称<input id="nName" type="text" placeholder="我的节点" /></label>
+            <label>地区<input id="nRegion" type="text" placeholder="SG" /></label>
+            <label>代理协议<select id="nScheme"><option value="https">HTTPS</option></select></label>
+            <label>代理服务器<input id="nHost" type="text" placeholder="sel2.lkz.pub" required /></label>
+            <label>端口<input id="nTcp" type="number" min="1" max="65535" placeholder="443" /></label>
+            <label>用户名<input id="nUser" type="text" placeholder="可选" /></label>
+            <label>密码<input id="nPass" type="text" placeholder="可选" /></label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary" id="nodeSubmit">保存</button>
+            <button type="button" id="nodeCancel">取消</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ===== 订阅 ===== -->
+      <section class="page" data-page="subscriptions" hidden>
+        <h2>订阅</h2>
+        <p class="muted">导入订阅地址会批量生成代理情景模式；刷新可更新节点并续报本机 IP。</p>
+        <form id="subForm">
+          <div class="cols">
+            <input id="subName" type="text" placeholder="订阅名称（可选）" />
+            <input id="subUrl" type="text" placeholder="粘贴订阅地址 https://域名/令牌/随机名" required />
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <button type="submit" class="primary">添加 / 更新订阅</button>
+            <button type="button" id="refreshAll">刷新全部</button>
+          </div>
+        </form>
+        <ul id="subList" class="list"></ul>
+      </section>
+
+      <!-- ===== 分流规则 ===== -->
+      <section class="page" data-page="rules" hidden>
+        <h2>分流规则</h2>
+        <p class="muted">「自动分流」依据内置全量 CN 域名/IP 判定直连。可开启远程更新保持最新（解析兼容纯文本/Clash YAML/DOMAIN-SUFFIX）。</p>
+        <label class="check"><input id="rulesRemoteEnabled" type="checkbox" /> 启用远程规则更新</label>
+        <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="留空=用内置" /></label>
+        <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt" /></label>
+        <div class="actions"><button id="saveRules" class="primary">保存规则设置</button><span id="rulesMsg" class="muted"></span></div>
+      </section>
+
+      <!-- ===== 通用 ===== -->
+      <section class="page" data-page="general" hidden>
+        <h2>通用</h2>
+        <label>探测间隔（分钟）<input id="probeInterval" type="number" min="1" max="1440" placeholder="10" /></label>
+        <p class="muted">连接期间每 2 分钟自动向服务器上报本机 IP（IP 白名单续期），无需手动。</p>
+        <div class="actions"><button id="saveGeneral" class="primary">保存通用设置</button><span id="generalMsg" class="muted"></span></div>
+      </section>
+
+      <!-- ===== 导入/导出 ===== -->
+      <section class="page" data-page="io" hidden>
+        <h2>导入 / 导出</h2>
+        <p class="muted">导出当前情景模式与设置为 JSON；可在其它设备导入。</p>
+        <div class="actions">
+          <button id="exportBtn" class="primary">导出配置</button>
+          <button id="importBtn">导入配置</button>
+          <input id="importFile" type="file" accept="application/json" hidden />
         </div>
-      </form>
-      <ul id="subList" class="list"></ul>
-    </section>
-
-    <!-- ===== 节点管理 ===== -->
-    <section class="card">
-      <h2>节点管理 <span class="muted">（多个节点：添加 / 编辑 / 删除 / 手动选择）</span></h2>
-      <form id="nodeForm">
-        <input type="hidden" id="nodeId" />
-        <div class="cols">
-          <label>名称<input id="nName" type="text" placeholder="我的节点" /></label>
-          <label>地区<input id="nRegion" type="text" placeholder="SG" /></label>
-          <label>代理域名/IP<input id="nHost" type="text" placeholder="sel2.lkz.pub" required /></label>
-          <label>代理 TCP 端口<input id="nTcp" type="number" min="1" max="65535" placeholder="443" /></label>
-          <label>用户名<input id="nUser" type="text" placeholder="可选 BasicAuth 用户" /></label>
-          <label>密码<input id="nPass" type="text" placeholder="可选 BasicAuth 密码" /></label>
-        </div>
-        <div class="actions" style="margin-top:12px">
-          <button type="submit" class="primary" id="nodeSubmit">添加节点</button>
-          <button type="button" id="nodeCancel" hidden>取消编辑</button>
-        </div>
-      </form>
-      <ul id="nodeList" class="list"></ul>
-    </section>
-
-    <!-- ===== 分流规则 ===== -->
-    <section class="card">
-      <h2>分流规则 <span class="muted">（默认用内置完整列表；可远程更新）</span></h2>
-      <label class="check"><input id="rulesRemoteEnabled" type="checkbox" /> 启用远程规则更新</label>
-      <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="留空=用内置；可填 jsDelivr 上的 Clash/纯文本域名列表" /></label>
-      <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt" /></label>
-      <p class="muted">内置已含全量 CN IP 段。远程源建议国内可直连的 jsDelivr（IP：<code>gaoyifan/china-operator-ip</code> china.txt）。解析兼容纯文本/YAML/DOMAIN-SUFFIX。</p>
-    </section>
-
-    <!-- ===== 通用设置 ===== -->
-    <section class="card">
-      <h2>通用设置</h2>
-      <label class="check"><input id="autoConnect" type="checkbox" /> 浏览器启动时自动连接上次节点</label>
-      <label>探测间隔（分钟）<input id="probeInterval" type="number" min="1" max="1440" placeholder="10" /></label>
-    </section>
-
-    <div class="card" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <button id="saveSettings" class="primary">保存规则与设置</button>
-      <span id="msg" class="muted"></span>
-    </div>
-  </main>
+        <p id="ioMsg" class="muted"></p>
+      </section>
+    </main>
+  </div>
 
   <script src="options.js" type="module"></script>
 </body>
