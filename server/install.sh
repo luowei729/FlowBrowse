@@ -192,7 +192,8 @@ cat <<EOF
 站点+代理(共用)   : ${DOMAIN}:${FB_TCP_PORT}  (TCP 443；CONNECT=代理、GET=订阅/首页)
 IP 白名单         : ${FB_PROXY_ALLOW}（拉过订阅的 IP 自动放行，TTL ${FB_PROXY_ALLOW_TTL_HOURS}h）
 静态白名单         : ${FB_PROXY_ALLOW_STATIC:-<未设置>}（写死的 IP/CIDR，永久放行）
-白名单上报接口     : https://${DOMAIN}:${FB_TCP_PORT}/${FB_ADMIN_TOKEN}/allow?add=auto   （管理密钥，勿外泄；可 ?add=<IP或CIDR>&ttl=小时 / ?del= / ?list=1）
+白名单上报接口     : https://${DOMAIN}:${FB_TCP_PORT}/${FB_ADMIN_TOKEN}/allow?add=auto   （可 ?add=<IP或CIDR>&ttl=小时 / ?del= / ?list=1）
+白名单管理密钥     : ${FB_ADMIN_TOKEN}   ← 即上条 URL 中 :443/ 与 /allow 之间那段；插件“IP 白名单”页需填它（与订阅凭据同为机密，勿外泄）
 ACME(证书)        : ${DOMAIN}:${FB_ACME_PORT} -> Let's Encrypt 自动申请/续期
 
 订阅地址(粘贴进插件"订阅管理")：
