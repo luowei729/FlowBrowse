@@ -104,3 +104,9 @@
 - 【图标】生成蓝/灰⇄图标，manifest 配 icons+default_icon，updateIcon 用 setIcon(getURL 绝对路径)换色代替大角标。
 - 【文档】README 加一键安装命令；全仓 md 脱敏 sel2 域名/测试 IP 为占位符。
 - 【交互】`install.sh` 在安装最初询问真实域名：当 `DOMAIN` 为空或仍是示例 `example.com` 时，tty 下提示输入并 `sed` 写回 `.env`；非交互终端则明确报错引导手动改 `.env`。（解决“拿示例 example.com 解析到 Cloudflare 当自己域名签证书必失败”）
+
+## 2026-10-20（修复预编译下载 FB_REPO 缺失 + 清除遗留 QUIC sysctl）
+
+- 【修复】全新 clone 跑 `flowbrowse.sh install` 报“未配置 FB_REPO/FB_DL_BASE → 预编译下载失败”：`.env.example` 和 `install.sh` 都没给 `FB_REPO` 默认值。→ `download_prebuilt` 里 `repo="${FB_REPO:-luowei729/FlowBrowse}"` 兜底（仍可被 .env 的 FB_REPO/FB_DL_BASE 覆盖）；实测拼出的 GitHub Release 地址 HTTP 200。旧 .env 无此键也能工作（代码默认兜底）；`FB_BIN_MODE=build/auto` 回退编译的能力保留。
+- 【文档】`.env.example` 新增“预编译二进制下载源”段（FB_BIN_MODE/FB_REPO/FB_DL_BASE 及注释），方便 fork/自建 Release 用户覆盖。
+- 【清理】移除 install.sh 里遗留的 QUIC UDP 缓冲区 sysctl 段（v0.4.x 已纯 TCP 443，不再需要）及其误导日志。

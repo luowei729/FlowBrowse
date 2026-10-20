@@ -112,7 +112,9 @@ apt-get install -y curl openssl >/dev/null 2>&1 || true
 systemctl stop flowbrowse 2>/dev/null || true
 
 download_prebuilt() {
-  local base="${FB_DL_BASE:-}" repo="${FB_REPO:-}"
+  # FB_REPO 默认本项目公开仓库；fork 用户可在 .env 设 FB_REPO=自己的仓库 或 FB_DL_BASE=自定义下载基址覆盖。
+  #   为什么给默认：全新 clone 的 .env 不含该键，若不兜底则 base 为空直接失败（“未配置 FB_REPO”）。
+  local base="${FB_DL_BASE:-}" repo="${FB_REPO:-luowei729/FlowBrowse}"
   [ -z "${base}" ] && [ -n "${repo}" ] && base="https://github.com/${repo}/releases/latest/download"
   [ -z "${base}" ] && { warn "未配置 FB_REPO/FB_DL_BASE"; return 1; }
   log "下载预编译二进制(arch ${FB_ARCH})：${base}"
@@ -156,14 +158,7 @@ id -u flowbrowse >/dev/null 2>&1 || useradd --system --home-dir /var/lib/flowbro
 mkdir -p "${DATA_DIR}" "${FB_CERT_CACHE}" "${FB_WEB_ROOT}"
 chown -R flowbrowse:flowbrowse "${DATA_DIR}" "${FB_CERT_CACHE}"
 
-# quic-go 官方建议调大 UDP 接收/发送缓冲区，否则 WebTransport(QUIC) 握手 Initial 包易丢→"Opening handshake failed"
-cat > /etc/sysctl.d/99-flowbrowse.conf <<'SYSCTL'
-net.core.rmem_max = 7550000
-net.core.rmem_default = 7550000
-net.core.wmem_max = 7550000
-SYSCTL
-sysctl --system >/dev/null 2>&1 || true
-log "已设置 UDP 缓冲区(sysctl)以保障 QUIC 握手"
+# 说明：v0.4.x 起已放弃 QUIC/WebTransport，代理为纯 TCP 443，无需再调 UDP 缓冲区（旧 sysctl 段随之移除）。
 
 install -m 644 "${SCRIPT_DIR}/systemd/flowbrowse.service" /etc/systemd/system/
 systemctl daemon-reload
