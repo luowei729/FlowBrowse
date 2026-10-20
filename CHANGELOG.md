@@ -110,3 +110,12 @@
 - 【修复】全新 clone 跑 `flowbrowse.sh install` 报“未配置 FB_REPO/FB_DL_BASE → 预编译下载失败”：`.env.example` 和 `install.sh` 都没给 `FB_REPO` 默认值。→ `download_prebuilt` 里 `repo="${FB_REPO:-luowei729/FlowBrowse}"` 兜底（仍可被 .env 的 FB_REPO/FB_DL_BASE 覆盖）；实测拼出的 GitHub Release 地址 HTTP 200。旧 .env 无此键也能工作（代码默认兜底）；`FB_BIN_MODE=build/auto` 回退编译的能力保留。
 - 【文档】`.env.example` 新增“预编译二进制下载源”段（FB_BIN_MODE/FB_REPO/FB_DL_BASE 及注释），方便 fork/自建 Release 用户覆盖。
 - 【清理】移除 install.sh 里遗留的 QUIC UDP 缓冲区 sysctl 段（v0.4.x 已纯 TCP 443，不再需要）及其误导日志。
+
+## 2026-10-20（自定义 IP 白名单上报 + 端口转发域名/IP 不对应）
+
+- 【背景】用户要用其他服务器 iptables 端口转发接入，导致：①白名单只能自动登记“拉订阅那条”的 IP，与转发后的代理来源 IP 不一致而误拦；②担心域名与 IP 不对应导致证书失败。
+- 【定性】证书按 **域名(SNI)** 校验、与解析到哪个 IP 无关；DNAT 是 L4 透传、TLS 端到端在源站。→ 路线①：域名 A 记指到中转机、中转机透传 443(+80)，无需改代码（节点必须填域名、不能填裸 IP）。
+- 【服务端 main.go】白名单重构为**静态网段 + 动态项(IP/CIDR)**：新增 config `FB_PROXY_ALLOW_STATIC`/`FB_ADMIN_TOKEN`+`splitList`；`allowList` 改为 `staticNets`+`entries[allowEntry{ipnet,exp}]`，`allowed()` 用 `net.IPNet.Contains` 支持 CIDR；新增 `toNet/addIP/addNet/del/listJSON/handleAdmin`。
+- 【上报接口】`GET/POST /<FB_ADMIN_TOKEN>/allow`：`add=auto|<ip|cidr>`(&`ttl=`小时)/`del=`/`list=1`，无参默认上报调用来源 IP。由独立管理密钥保护，留空=禁用。
+- 【安装】`.env.example` 新增两键；install.sh 自动随机化 `FB_ADMIN_TOKEN`（旧 .env 无此键也能补写）、确保 `FB_PROXY_ALLOW_STATIC` 键存在、完成横幅打印上报 URL。
+- 【文档】新建 `docs/PORT_FORWARDING.md`（DNS+iptables+安全组+白名单放行全步骤）；SERVER_DEPLOY/THREAT_MODEL/DEPLOY_CREDENTIALS/DEVTIPS/AGENTS 同步。（待 Actions 编译新二进制后部署到服务器）

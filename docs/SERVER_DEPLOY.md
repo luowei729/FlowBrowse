@@ -43,6 +43,15 @@ curl '<订阅URL>' -o /dev/null -w '%{http_code}\n'              # 先拉一次�
 curl -x https://<域名>:443 -o /dev/null -w '%{http_code}\n' https://www.example.com   # 期望 2xx(白名单已放行本机 IP)
 ```
 
+## 5.1 自定义 IP 白名单 / 端口转发接入
+
+需经**另一台服务器 iptables 端口转发**接入（入口 IP 与证书域名不对应）：把域名 A 记录指到中转机、中转机透传 TCP 443(+80) 到源站，证书按域名(SNI)校验、TLS 端到端仍在源站。完整步骤与命令见 **`docs/PORT_FORWARDING.md`**。
+
+转发后源站看到的来源是**中转机出口 IP**，用以下任一方式放行（可叠加）：
+- **静态**（写死、永久）：`.env` 里 `FB_PROXY_ALLOW_STATIC=<中转机IP或CIDR>`（逗号分隔），`systemctl restart flowbrowse`。
+- **动态上报**（带管理密钥）：`curl "https://<域名>/<FB_ADMIN_TOKEN>/allow?add=auto"`（或 `?add=<IP|CIDR>&ttl=小时` / `?list=1` / `?del=<IP>`）。`FB_ADMIN_TOKEN` 由 install 自动生成，**机密勿泄**，留空=禁用。
+- 二者均需 `FB_PROXY_ALLOW=on`（白名单开启）才起作用。
+
 ## 6. 卸载
 
 ```bash

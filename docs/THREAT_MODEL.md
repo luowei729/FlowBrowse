@@ -32,6 +32,7 @@
 
 - **代理 = 单端口 TCP 443 + 自动 IP 白名单**：代理与订阅/首页共用 TCP 443（按 CONNECT/GET 分流）。因 Chrome 对 HTTPS 代理的 CONNECT 不支持扩展自动注入 BasicAuth（实测 `onAuthRequired` 返回正确凭据仍 `ERR_INVALID_AUTH_CREDENTIALS`），访问控制改为 **IP 白名单**：只有拉到有效订阅 URL（密钥路径即凭证）的客户端 IP 才放行 CONNECT（TTL 30天）。CONNECT 目标仍在 TLS 内对 GFW 隐藏。
 - 保留 `FB_PROXY_AUTH=on` 开关：可选叠加 Basic（但 HTTPS 代理下会弹框，不推荐）。
+- **自定义 IP 白名单（适配端口转发）**：因经其他服务器 iptables 透传时，源站看到的来源常为**转发机/出口 IP**（MASQUERADE）且与“拉订阅”IP 不一致，光靠自动学习会误拦。故提供：①静态网段 `FB_PROXY_ALLOW_STATIC`（写死转发机 IP/CIDR、永久）；②上报接口 `GET /<FB_ADMIN_TOKEN>/allow?add=auto|<ip|cidr>&ttl=<h>`（运行时增删查）。**上报接口由独立管理密钥 `FB_ADMIN_TOKEN` 保护**：泄露=任何人可把自己 IP 加白名单→等同开放代理，故该令牌与订阅密钥 URL 同等机密、勿外泄；留空则禁用。具体部署见 `docs/PORT_FORWARDING.md`。
 - 订阅接口靠“密钥目录/随机文件名”不可猜路径保护；token/凭据属敏感信息，导出/分享需自行注意。
 - 证书与私钥仅在服务器 autocert 缓存目录，不入仓库、不入记忆。
 - **白名单残余风险**：家庭宽带换 IP 后需重拉/刷新一次订阅；白名单文件存于服务器，需保护服务器本身。

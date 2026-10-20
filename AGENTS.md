@@ -27,7 +27,7 @@ FlowBrowse 是一个**无需本地客户端**的 Chrome 浏览器网络代理扩
 ```
 FlowBrowse/
 ├── AGENTS.md  CHANGELOG.md  DEPLOY_CREDENTIALS.md  DEVTIPS.md  PROJECT_PLAN.md  README.md
-├── docs/                 # 细分设计文档（除根目录 5 个 md 外，其余 md 均放这里）
+├── docs/                 # 细分设计文档（除根目录 5 个 md 外，其余 md 均放这里）：ARCHITECTURE/THREAT_MODEL/SERVER_DEPLOY/PORT_FORWARDING/RULES_FORMAT 等
 ├── server/               # 远程服务端：单一 Go 程序（代理+订阅+首页+IP白名单+autocert）+ 一键安装脚本
 └── extension/            # Chrome MV3 扩展
 ```
@@ -52,5 +52,5 @@ FlowBrowse/
 
 ## 6. 交接与排查
 
-- 部署/运行/调试步骤见 `DEVTIPS.md` 与 `docs/SERVER_DEPLOY.md`。
+- 部署/运行/调试步骤见 `DEVTIPS.md` 与 `docs/SERVER_DEPLOY.md`；经其他服务器端口转发接入见 `docs/PORT_FORWARDING.md`。
 - 遇到协议/兼容性问题先查 `docs/ARCHITECTURE.md` 与 `docs/THREAT_MODEL.md`。

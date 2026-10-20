@@ -75,14 +75,22 @@ if [ -z "${AUTH_PASS:-}" ] || [ "${AUTH_PASS}" = "CHANGE_ME_STRONG_PASSWORD" ]; 
   AUTH_PASS="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)"; sed -i "s|^AUTH_PASS=.*|AUTH_PASS=${AUTH_PASS}|" "${ENV_FILE}"; changed=1
   log "已生成随机 AUTH_PASS，请前往 ${ENV_FILE} 查看(勿外泄)。"
 fi
+# 管理密钥 FB_ADMIN_TOKEN：旧 .env 可能无此键，用 grep||echo 兼容补写（与 FB_SUB_FILE 同模式）
+if [ -z "${FB_ADMIN_TOKEN:-}" ] || [ "${FB_ADMIN_TOKEN}" = "CHANGE_ME_ADMIN_TOKEN" ]; then
+  FB_ADMIN_TOKEN="$(openssl rand -hex 16)"
+  grep -q '^FB_ADMIN_TOKEN=' "${ENV_FILE}" && sed -i "s|^FB_ADMIN_TOKEN=.*|FB_ADMIN_TOKEN=${FB_ADMIN_TOKEN}|" "${ENV_FILE}" || echo "FB_ADMIN_TOKEN=${FB_ADMIN_TOKEN}" >> "${ENV_FILE}"
+  changed=1
+  log "已生成随机 FB_ADMIN_TOKEN（白名单上报接口管理密钥），URL 见完成提示(勿外泄)。"
+fi
 [ "${changed}" -eq 1 ] && chmod 600 "${ENV_FILE}"
 
 : "${DOMAIN:?DOMAIN 未设置}"
 : "${AUTH_USER:?AUTH_USER 未设置}"
 export FB_TCP_PORT="${FB_TCP_PORT:-443}" FB_ACME_PORT="${FB_ACME_PORT:-80}" FB_CERT_CACHE="${FB_CERT_CACHE:-${DATA_DIR}/certcache}" FB_PROXY_ALLOW="${FB_PROXY_ALLOW:-on}" FB_PROXY_ALLOW_TTL_HOURS="${FB_PROXY_ALLOW_TTL_HOURS:-720}"
 
-# 确保 .env 内含白名单开关，避免与程序默认值漂移
+# 确保 .env 内含白名单开关/自定义项，避免与程序默认值漂移
 grep -q '^FB_PROXY_ALLOW=' "${ENV_FILE}" || echo "FB_PROXY_ALLOW=${FB_PROXY_ALLOW}" >> "${ENV_FILE}"
+grep -q '^FB_PROXY_ALLOW_STATIC=' "${ENV_FILE}" || echo "FB_PROXY_ALLOW_STATIC=" >> "${ENV_FILE}"
 chmod 600 "${ENV_FILE}"
 
 # ---------- 2) 预检域名解析 ----------
@@ -183,6 +191,8 @@ cat <<EOF
 =================== FlowBrowse 安装完成 ===================
 站点+代理(共用)   : ${DOMAIN}:${FB_TCP_PORT}  (TCP 443；CONNECT=代理、GET=订阅/首页)
 IP 白名单         : ${FB_PROXY_ALLOW}（拉过订阅的 IP 自动放行，TTL ${FB_PROXY_ALLOW_TTL_HOURS}h）
+静态白名单         : ${FB_PROXY_ALLOW_STATIC:-<未设置>}（写死的 IP/CIDR，永久放行）
+白名单上报接口     : https://${DOMAIN}:${FB_TCP_PORT}/${FB_ADMIN_TOKEN}/allow?add=auto   （管理密钥，勿外泄；可 ?add=<IP或CIDR>&ttl=小时 / ?del= / ?list=1）
 ACME(证书)        : ${DOMAIN}:${FB_ACME_PORT} -> Let's Encrypt 自动申请/续期
 
 订阅地址(粘贴进插件"订阅管理")：

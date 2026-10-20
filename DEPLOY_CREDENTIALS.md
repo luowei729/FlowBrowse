@@ -13,6 +13,7 @@
 | 站点证书 | Let's Encrypt | 由服务内 autocert 自动签发/续期（HTTP-01） |
 | 代理+订阅+首页 | TCP 443 | 单一 Go 服务复用（CONNECT=代理、GET=订阅/首页） |
 | 访问控制 | 自动 IP 白名单 | 拉到有效订阅 URL 的客户端 IP 自动放行（TTL 30天） |
+| 自定义白名单 | 静态网段 + 上报接口 | `FB_PROXY_ALLOW_STATIC`(永久 IP/CIDR) 与 `/<FB_ADMIN_TOKEN>/allow`(动态增删查)，适配端口转发 |
 | HTTP-01 需放行 | TCP 80 | 证书签发用；不可达则改 DNS-01 |
 
 > 已放弃 QUIC/WebTransport，**不再需要 UDP 443**；也不再有 2096/62096 等额外代理端口。
@@ -24,6 +25,8 @@
 - `AUTH_USER` / `AUTH_PASS` = 可选 Basic 凭据（默认 `FB_PROXY_AUTH=off` 不用；访问控制靠 IP 白名单）
 - `NODE_TOKEN` = 订阅接口访问 token（密钥路径段，兼作白名单凭证；占位符，勿提交真实值）
 - `FB_PROXY_ALLOW` = IP 白名单开关（默认 on）；`FB_PROXY_ALLOW_TTL_HOURS` = 放行时长（默认 720）
+- `FB_PROXY_ALLOW_STATIC` = 静态放行的 IP/CIDR（逗号分隔、永久不过期；如写死中转/转发机 IP）
+- `FB_ADMIN_TOKEN` = 白名单上报接口令牌（占位符 `CHANGE_ME_ADMIN_TOKEN` 自动生成随机；**机密、勿提交/外泄**；留空=禁用上报接口）
 
 真实值写入服务器上的 `/etc/flowbrowse/.env`（已被 `.gitignore` 忽略），仓库内只保留 `server/config/.env.example`。
 

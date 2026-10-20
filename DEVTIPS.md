@@ -35,3 +35,12 @@
 - 因此：要“私密（TLS）+免弹框”就不能靠密码；Zero Omega 能填用户名是因为它常走 **HTTP 明文代理**（CONNECT 与目标会被网络看到，对翻墙不利）。
 - **正解：自动 IP 白名单**。拉到含密钥订阅 URL 即视为已认证，服务端记下该客户端 IP 并放行其 CONNECT（TTL 30天、存 `/var/lib/flowbrowse/allowlist.json`）。换 IP 后需重拉/刷新一次订阅。
 - **代理必须走 TCP**：`chrome.proxy` 不支持把流量交给 UDP/QUIC；WebTransport 只能承载扩展自身 fetch，接管不了标签页通用流量。故已放弃 QUIC 主干，单端口 TCP 443（CONNECT=代理、GET=订阅/首页）。
+
+## 6. 端口转发接入（域名与 IP 不对应）+ 白名单上报
+
+- **原理**：Chrome 对 HTTPS 代理是按**主机名(SNI)**验证书，与域名解析到哪个 IP 无关；`iptables` DNAT 是 L4 透传，TLS 仍客户端↔源站端到端。所以“域名指到中转机 IP、证书却是源站签的”完全正常。节点里**必须填域名、不能填中转机裸 IP**（裸 IP 无 LE 域名证书、Chrome 拒）。
+- **做法（路线①，不改代码）**：把域名 A 记指到中转机；中转机 `sysctl net.ipv4.ip_forward=1` + `iptables -t nat PREROUTING dport 443 DNAT → 源站:443` + `POSTROUTING MASQUERADE`（+80 透传供 HTTP-01 续期）。详见 `docs/PORT_FORWARDING.md`。
+- **白名单因透传而失配**：MASQUERADE 后源站看到均为中转机出口 IP。新提供两种放行：
+  - 静态：`.env` `FB_PROXY_ALLOW_STATIC=<IP或CIDR>`（逗号分隔、永久不过期，main.go `newAllowList` 解析为 `staticNets`）。
+  - 上报：`GET /<FB_ADMIN_TOKEN>/allow` 支持 `add=auto|<ip|cidr>&ttl=小时` / `del=` / `list=1`；无参默认 add=auto（上报调用来源 IP）。`allowed()` 已改为支持 **CIDR 包含**（`net.IPNet.Contains`）。
+- **安全红线**：`FB_ADMIN_TOKEN` 泄露=任何人可自加白名单→开放代理；与订阅密钥 URL 同等机密；留空则上报接口自动禁用。
