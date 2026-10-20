@@ -96,3 +96,10 @@
 - 【验证】自定义匹配正确（子域/CIDR/强制代理均命中）；e2e 无回归。
 - 【修复】切换报“PAC 含非 ASCII”：原因是我在 split 模式 PAC 模板里写了一行**中文注释**（chrome.proxy 仅允许 ASCII）。改为英文注释；验证 global/split PAC 均无 ASCII 外字符。（教训：PAC 模板内注释必须英文，proxy-manager 的 ASCII 校验会兜底报错）
 - 【优化】域名远程源默认预填推荐地址（jsDelivr Loyalsoldier/clash-rules direct.txt），与 IP 框 china.txt 对称；两框都预填但“使用远程”默认关=用内置。
+
+## 2026-10-20（修复一键安装 .env 报错 + 图标/README）
+
+- 【修复】`flowbrowse.sh install` 报 `.env: line 8: syntax error near unexpected token 'newline'`：因 `.env.example` 用了 `<随机用户名>` 尖括号占位符，而 .env 会被 `set -a; . .env` source，`<` 是重定向符。且旧占位不匹配 install.sh 的 `CHANGE_ME_*` 检测。→ 改为 shell 安全且匹配的 `CHANGE_ME_LONG_RANDOM`/`CHANGE_ME_SUBFILE`/`CHANGE_ME_STRONG_PASSWORD`（AUTH_USER=fbuser）。
+- 【自愈】install.sh source 前加 `bash -n` 校验：若旧 .env 含元字符则备份为 .env.bak 并从示例重建，免手动删。
+- 【图标】生成蓝/灰⇄图标，manifest 配 icons+default_icon，updateIcon 用 setIcon(getURL 绝对路径)换色代替大角标。
+- 【文档】README 加一键安装命令；全仓 md 脱敏 sel2 域名/测试 IP 为占位符。

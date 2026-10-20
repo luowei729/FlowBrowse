@@ -33,6 +33,13 @@ if [ ! -f "${ENV_FILE}" ]; then
   chmod 600 "${ENV_FILE}"
   warn "已生成默认 ${ENV_FILE}，占位密钥会被自动替换为随机值。"
 fi
+# 自愈：.env 会被 source，若含 shell 元字符（如旧版 <占位符>）会语法报错；校验不过则备份并从示例重建
+if ! bash -n "${ENV_FILE}" 2>/dev/null; then
+  warn "${ENV_FILE} 语法异常（可能含 < > 等元字符），已备份为 .env.bak 并从示例重建。"
+  mv "${ENV_FILE}" "${ENV_FILE}.bak"
+  cp "${SCRIPT_DIR}/config/.env.example" "${ENV_FILE}"
+  chmod 600 "${ENV_FILE}"
+fi
 set -a; . "${ENV_FILE}"; set +a
 export FB_WEB_ROOT="${FB_WEB_ROOT:-$WEB_ROOT_DEFAULT}"
 
