@@ -20,7 +20,14 @@ function apiUrl(server, token, params) {
 
 // 统一请求：no-store 防缓存、omit 不带凭据；非 2xx 抛错（附带响应片段便于排查“密钥/地址不对→404”）
 async function req(url) {
-  const resp = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+  let resp;
+  try {
+    resp = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+  } catch (e) {
+    // fetch 直接抛错=网络层失败：最常见是“服务器填了 IP”导致 HTTPS 证书主机名不匹配被 Chrome 拒；也可能是连不通/DNS/证书未就绪
+    const m = (e && e.message) || String(e);
+    throw new Error(`连接失败：${m}（服务器请填「域名:端口」而非 IP——上报接口是 HTTPS，用 IP 会因证书主机名不匹配被拒；并确认服务已启动、证书已签发）`);
+  }
   const text = await resp.text();
   if (!resp.ok) {
     const hint = resp.status === 404 ? '（密钥或地址不对，或上报接口未启用）' : '';
