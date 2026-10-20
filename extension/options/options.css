@@ -11,6 +11,8 @@
   --danger: #d93025;
 }
 * { box-sizing: border-box; }
+/* 关键：.page/.panel 用了 display:grid 会盖过 [hidden] 的 UA 默认，导致分页切换失效。强制 hidden 生效。 */
+[hidden] { display: none !important; }
 body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; color: var(--text); background: var(--bg); }
 
 .app { display: flex; min-height: 100vh; }
