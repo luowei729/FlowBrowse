@@ -8,6 +8,7 @@ export const KEYS = {
   NODES: 'fb_nodes',         // 节点数组（手动 + 订阅导入）
   SUBS: 'fb_subs',           // 订阅数组（可增删改、更新）
   RUNTIME: 'fb_runtime',     // 运行态：是否已连接、最近探测结果
+  RULES: 'fb_rules_cache',   // 远程拉取的 CN 规则缓存（离线可用、避免每次连接都拉）
 };
 
 // 代理凭据在 storage 中的键：auth.js 的 onAuthRequired 读它注入 Proxy-Authorization。
@@ -29,6 +30,9 @@ export const DEFAULT_SETTINGS = {
   // 内置已预置全量 CN IP 段；下列为可选的国内可直连远程源（jsDelivr CDN）
   rulesRemoteUrlDomains: '', // 域名源留空=用内置；可填 Clash YAML/纯文本域名列表 URL
   rulesRemoteUrlCidrs: 'https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt',
+  // 用户自定义地址列表（每行一条，支持 example.com / *.example.com / 1.2.3.4 / 10.0.0.0/8）
+  customDirect: '',          // 不代理（强制直连）列表：优先于一切，命中走 DIRECT
+  customProxy: '',           // 强制代理列表：命中走代理（在自定义直连之后判定）
 };
 
 // ===== 运行态默认值 =====
@@ -82,6 +86,16 @@ export async function setRuntime(patch) {
   const next = { ...DEFAULT_RUNTIME, ...cur, ...patch };
   await chrome.storage.local.set({ [KEYS.RUNTIME]: next });
   return next;
+}
+
+// ===== 远程 CN 规则缓存 =====
+// 为什么缓存：远程列表只在“立即更新”时拉一次并落盘，连接时直接读缓存，既快又离线可用，避免每次连接都走网络。
+export async function getRulesCache() {
+  return (await chrome.storage.local.get(KEYS.RULES))[KEYS.RULES] || null; // {domains,cidrs,updatedAt,src}
+}
+export async function saveRulesCache(cache) {
+  await chrome.storage.local.set({ [KEYS.RULES]: cache });
+  return cache;
 }
 
 // 生成短 id：节点/订阅都需要稳定标识，用于选择、去重与级联删除

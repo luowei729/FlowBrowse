@@ -2,6 +2,7 @@
 // 为什么用 PAC 的 `HTTPS host:port` 关键字：主干是 TLS 转发代理（防嗅探的关键），
 //   PAC 里若用 `PROXY host:port` 会被 Chrome 当作明文 HTTP 代理去连 443，导致握手失败；
 //   `HTTPS host:port` 才会让 Chrome 对代理建立 TLS 连接。国内命中则返回 DIRECT（直连不出网，减小足迹）。
+import { getRulesCache, saveRulesCache } from './config.js';
 
 // 内置列表文件（打包进扩展；可被"远程更新"覆盖，见 loadCnData）
 const BUNDLED_DOMAINS = 'rules/cn-domains.txt';
@@ -46,29 +47,49 @@ async function fetchRemoteList(url, kind) {
   return parseRuleText(await resp.text(), kind);
 }
 
-// 加载 CN 域名后缀与 IP CIDR：域名/CIDR 各取所需——
-//   设了远程 URL 就用远程（解析健壮），否则用内置。允许只远程 CIDR、域名仍用内置。
+// 加载 CN 域名后缀与 IP CIDR：优先用“立即更新”缓存下来的远程规则（离线可用、连接时不走网络），
+//   未开启远程或无缓存则用内置。连接热路径只读本地，不 fetch。
 export async function loadCnData(settings = {}) {
-  let domains, cidrs;
-  const enabled = settings.rulesRemoteEnabled;
-
-  // 域名：远程优先，失败/未配置回退内置
-  if (enabled && settings.rulesRemoteUrlDomains) {
-    try { domains = await fetchRemoteList(settings.rulesRemoteUrlDomains, 'domain'); }
-    catch (e) { console.warn('[FlowBrowse] 远程域名规则失败，回退内置:', e); domains = await readList(BUNDLED_DOMAINS); }
-  } else {
-    domains = await readList(BUNDLED_DOMAINS);
+  let domains = await readList(BUNDLED_DOMAINS);
+  let cidrs = await readList(BUNDLED_CIDRS);
+  if (settings.rulesRemoteEnabled) {
+    const cache = await getRulesCache();
+    if (cache) {
+      if (Array.isArray(cache.domains) && cache.domains.length) domains = cache.domains;
+      if (Array.isArray(cache.cidrs) && cache.cidrs.length) cidrs = cache.cidrs;
+    }
   }
-
-  // CIDR：远程优先，失败/未配置回退内置
-  if (enabled && settings.rulesRemoteUrlCidrs) {
-    try { cidrs = await fetchRemoteList(settings.rulesRemoteUrlCidrs, 'cidr'); }
-    catch (e) { console.warn('[FlowBrowse] 远程IP规则失败，回退内置:', e); cidrs = await readList(BUNDLED_CIDRS); }
-  } else {
-    cidrs = await readList(BUNDLED_CIDRS);
-  }
-
   return { domains, cidrs };
+}
+
+// 立即更新：拉取远程域名/IP 列表并写入缓存（供 loadCnData 读取）。失败会抛出，交由 UI 提示。
+//   未配置的 URL 保持内置；两者都未配置则缓存即内置。
+export async function fetchAndCacheRules(settings = {}) {
+  let domains = await readList(BUNDLED_DOMAINS);
+  let cidrs = await readList(BUNDLED_CIDRS);
+  let src = 'bundled';
+  if (settings.rulesRemoteUrlDomains) { domains = await fetchRemoteList(settings.rulesRemoteUrlDomains, 'domain'); src = 'remote'; }
+  if (settings.rulesRemoteUrlCidrs) { cidrs = await fetchRemoteList(settings.rulesRemoteUrlCidrs, 'cidr'); src = 'remote'; }
+  const cache = { domains, cidrs, updatedAt: Date.now(), src };
+  await saveRulesCache(cache);
+  return { domainCount: domains.length, cidrCount: cidrs.length, updatedAt: cache.updatedAt, src };
+}
+
+// 解析用户自定义地址列表（每行/逗号分隔）为两类：glob 通配（域名与 IP 通配，交给 shExpMatch）+ CIDR 数值段。
+//   裸域 example.com 自动补 *.example.com 覆盖子域；1.2.3.4 精确；10.0.0.0/8 走数值段匹配。
+export function parseCustomList(text) {
+  const globs = new Set();
+  const nets = [];
+  const lines = String(text || '').split(/[\n,;]+/).map((s) => s.trim().toLowerCase()).filter((s) => s && !s.startsWith('#'));
+  for (let l of lines) {
+    if (l.includes('/')) { const p = toNetPairs([l]); if (p.length) { nets.push(p[0]); continue; } } // CIDR
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(l)) { globs.add(l); continue; } // IP 字面量
+    const bare = l.replace(/^\*\./, '').replace(/^\./, ''); // 归一化
+    if (!bare) continue;
+    if (bare.includes('*') || bare.includes('?')) { globs.add(bare); continue; } // 已是通配
+    globs.add(bare); globs.add('*.' + bare); // 精确 + 子域
+  }
+  return { globs: [...globs], nets };
 }
 
 // 把字符串数组安全内联进 PAC 源码（JSON 转义，避免注入与语法错误）
@@ -94,17 +115,30 @@ function toNetPairs(cidrs) {
 // 生成 PAC 脚本
 //   proxyHost/proxyPort：主干 HTTPS 转发代理（完全来自节点/设置，无硬编码域名）
 //   mode：'global' 全走代理 | 'split' 国内外分流
-export function buildPac(proxyHost, proxyPort, mode, cnData) {
+//   custom：{direct,proxy} 用户自定义地址列表文本（优先于 CN/默认判定）
+export function buildPac(proxyHost, proxyPort, mode, cnData, custom = {}) {
   const proxyLine = `HTTPS ${proxyHost}:${proxyPort}`;
+  const cd = parseCustomList(custom.direct); // 不代理（强制直连）
+  const cp = parseCustomList(custom.proxy);  // 强制代理
+  // 公共辅助：IP 转整数 + glob(shExpMatch) 匹配 + 自定义 CIDR 数值段匹配
+  const helpers = `
+function ip2long(ip){var p=ip.split('.');if(p.length!==4)return null;var n=0;for(var i=0;i<4;i++){var o=parseInt(p[i],10);if(isNaN(o)||o<0||o>255)return null;n=(n<<8)|o;}return n>>>0;}
+function inGlobs(g,host){for(var i=0;i<g.length;i++){if(shExpMatch(host,g[i]))return true;}return false;}
+function inNets(n,host){if(!n.length)return false;var ip=ip2long(host);if(ip===null)return false;for(var i=0;i<n.length;i++){if((ip&n[i][1])===n[i][0])return true;}return false;}
+var CD_G=${js(cd.globs)},CD_N=${js(cd.nets)},CP_G=${js(cp.globs)},CP_N=${js(cp.nets)};`;
+  // 自定义优先判定：先“不代理”直连，再“强制代理”
+  const customChecks = `
+  if (inGlobs(CD_G, host) || inNets(CD_N, host)) return 'DIRECT';
+  if (inGlobs(CP_G, host) || inNets(CP_N, host)) return '${proxyLine}';`;
 
-  // 全局模式：除本地/内网外一律走代理，无需嵌入 CN 列表
+  // 全局模式：除本地/内网/自定义直连外一律走代理，无需嵌入 CN 列表
   if (mode === 'global') {
     return `
-function FindProxyForURL(url, host) {
-  // Control plane: the proxy server's own host must go DIRECT so subscription/heartbeat reach it with the real client IP.
+function FindProxyForURL(url, host) {${helpers}
+  // Control plane: proxy server's own host must go DIRECT so subscription/heartbeat carry the real client IP.
   if (host === '${proxyHost}') return 'DIRECT';
   if (isPlainHostName(host) || host === '127.0.0.1' || host === 'localhost') return 'DIRECT';
-  if (shExpMatch(host, '10.*') || shExpMatch(host, '192.168.*') || shExpMatch(host, '172.16.*')) return 'DIRECT';
+  if (shExpMatch(host, '10.*') || shExpMatch(host, '192.168.*') || shExpMatch(host, '172.16.*')) return 'DIRECT';${customChecks}
   return '${proxyLine}';
 }
 `.trim();
@@ -117,19 +151,7 @@ function FindProxyForURL(url, host) {
 // ==== FlowBrowse auto-generated split PAC (do not edit by hand) ====
 var CN_SET = new Set(${js(cnData.domains)});
 var CN_NETS = ${js(nets)}; // [base, mask] precomputed
-
-// Convert dotted IPv4 to a 32-bit unsigned integer (host only)
-function ip2long(ip) {
-  var parts = ip.split('.');
-  if (parts.length !== 4) return null;
-  var n = 0;
-  for (var i = 0; i < 4; i++) {
-    var o = parseInt(parts[i], 10);
-    if (isNaN(o) || o < 0 || o > 255) return null;
-    n = (n << 8) | o;
-  }
-  return n >>> 0;
-}
+${helpers}
 
 // IP-literal host in any CN net? (integer compare over precomputed pairs)
 function inCnCidr(host) {
@@ -141,8 +163,7 @@ function inCnCidr(host) {
   return false;
 }
 
-// Match host against the CN domain set by walking parent domains.
-// Fast: O(#labels) hash lookups, scales to 100k+ entries. e.g. www.douyin.com -> douyin.com(hit) ; x.cn -> cn(hit).
+// Match host against the CN domain set by walking parent domains (O(#labels) hash lookups).
 function inCnDomain(host) {
   host = host.toLowerCase();
   while (true) {
@@ -155,7 +176,7 @@ function inCnDomain(host) {
 }
 
 function FindProxyForURL(url, host) {
-  // Control plane: proxy server's own host goes DIRECT so subscription/heartbeat carry the real client IP (not looped via proxy).
+  // Control plane: proxy server's own host goes DIRECT so subscription/heartbeat carry the real client IP.
   if (host === '${proxyHost}') return 'DIRECT';
   // Local / loopback / private ranges always connect directly
   if (isPlainHostName(host) || host === '127.0.0.1' || host === 'localhost' || host === '::1') return 'DIRECT';
@@ -163,7 +184,9 @@ function FindProxyForURL(url, host) {
       shExpMatch(host, '172.16.*') || shExpMatch(host, '172.17.*') ||
       shExpMatch(host, '172.18.*') || shExpMatch(host, '172.19.*') || shExpMatch(host, '172.2*') ||
       shExpMatch(host, '172.30.*') || shExpMatch(host, '172.31.*')) return 'DIRECT';
-
+  // 用户自定义列表优先（不代理 / 强制代理）
+  if (inGlobs(CD_G, host) || inNets(CD_N, host)) return 'DIRECT';
+  if (inGlobs(CP_G, host) || inNets(CP_N, host)) return '${proxyLine}';
   // IP literal by CIDR, domain by suffix; CN => DIRECT, otherwise via HTTPS(TLS) proxy
   if (inCnCidr(host)) return 'DIRECT';
   if (inCnDomain(host)) return 'DIRECT';

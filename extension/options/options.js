@@ -77,7 +77,17 @@ function renderForms(state) {
   $('rulesRemoteEnabled').checked = !!settings.rulesRemoteEnabled;
   $('rulesUrlDomains').value = settings.rulesRemoteUrlDomains || '';
   $('rulesUrlCidrs').value = settings.rulesRemoteUrlCidrs || '';
+  $('customDirect').value = settings.customDirect || '';
+  $('customProxy').value = settings.customProxy || '';
   $('probeInterval').value = settings.probeIntervalMinutes || 10;
+  // 规则来源状态
+  const rc = state.rulesCache;
+  const el = $('rulesStatus');
+  if (settings.rulesRemoteEnabled && rc && rc.updatedAt && Array.isArray(rc.domains)) {
+    el.textContent = `当前：远程缓存，更新于 ${new Date(rc.updatedAt).toLocaleString()}（域名 ${rc.domains.length} / IP ${rc.cidrs.length}）`;
+  } else {
+    el.textContent = '当前：内置规则（全量 CN 域名 + IP 段）';
+  }
 }
 
 async function apply() {
@@ -138,6 +148,24 @@ $('saveRules').addEventListener('click', async () => {
     rulesRemoteUrlCidrs: $('rulesUrlCidrs').value.trim(),
   } });
   $('rulesMsg').textContent = '已保存'; setTimeout(() => ($('rulesMsg').textContent = ''), 1500);
+});
+// 保存自定义不代理/强制代理列表（setSettings 会触发重套 PAC，立即生效）
+$('saveCustom').addEventListener('click', async () => {
+  await send({ action: 'setSettings', patch: { customDirect: $('customDirect').value, customProxy: $('customProxy').value } });
+  $('customMsg').textContent = '已保存并生效'; setTimeout(() => ($('customMsg').textContent = ''), 1500);
+});
+// 立即更新：先存远程设置，再拉取写缓存并重套 PAC
+$('updateRules').addEventListener('click', async () => {
+  await send({ action: 'setSettings', patch: {
+    rulesRemoteEnabled: $('rulesRemoteEnabled').checked,
+    rulesRemoteUrlDomains: $('rulesUrlDomains').value.trim(),
+    rulesRemoteUrlCidrs: $('rulesUrlCidrs').value.trim(),
+  } });
+  $('rulesMsg').textContent = '更新中…';
+  const resp = await send({ action: 'updateRules' });
+  if (resp && resp.ok) { $('rulesMsg').textContent = `已更新：域名 ${resp.info.domainCount} / IP ${resp.info.cidrCount}`; apply(); }
+  else { $('rulesMsg').textContent = '更新失败：' + ((resp && resp.error) || ''); }
+  setTimeout(() => ($('rulesMsg').textContent = ''), 4000);
 });
 $('saveGeneral').addEventListener('click', async () => {
   await send({ action: 'setSettings', patch: { probeIntervalMinutes: parseInt($('probeInterval').value, 10) || 10 } });

@@ -74,11 +74,32 @@
       <!-- ===== 分流规则 ===== -->
       <section class="page" data-page="rules" hidden>
         <h2>分流规则</h2>
-        <p class="muted">「自动分流」依据内置全量 CN 域名/IP 判定直连。可开启远程更新保持最新（解析兼容纯文本/Clash YAML/DOMAIN-SUFFIX）。</p>
-        <label class="check"><input id="rulesRemoteEnabled" type="checkbox" /> 启用远程规则更新</label>
-        <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="留空=用内置" /></label>
-        <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt" /></label>
-        <div class="actions"><button id="saveRules" class="primary">保存规则设置</button><span id="rulesMsg" class="muted"></span></div>
+        <p class="muted">「自动分流」依据内置全量 CN 域名/IP 判定直连。可加自定义地址列表覆盖判定，或开启远程更新保持最新。</p>
+
+        <div class="panel">
+          <h3>不代理的地址列表（强制直连）</h3>
+          <p class="muted">每行一条，支持 example.com / *.example.com / 1.2.3.4 / 10.0.0.0/8。命中的地址一定直连，不走代理。</p>
+          <textarea id="customDirect" rows="5" placeholder="example.com&#10;*.internal.corp&#10;192.168.0.0/16"></textarea>
+        </div>
+        <div class="panel">
+          <h3>强制代理的地址列表</h3>
+          <p class="muted">每行一条，格式同上。命中的地址一定走代理（优先于内置 CN 直连）。</p>
+          <textarea id="customProxy" rows="4" placeholder="some-blocked-site.com"></textarea>
+        </div>
+        <div class="actions"><button id="saveCustom" class="primary">保存自定义列表</button><span id="customMsg" class="muted"></span></div>
+
+        <div class="panel">
+          <h3>远程规则更新</h3>
+          <label class="check"><input id="rulesRemoteEnabled" type="checkbox" /> 使用远程规则（否则用内置）</label>
+          <label>CN 域名列表 URL<input id="rulesUrlDomains" type="text" placeholder="留空=用内置" /></label>
+          <label>CN IP CIDR 列表 URL<input id="rulesUrlCidrs" type="text" placeholder="https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt" /></label>
+          <p class="muted" id="rulesStatus">当前：内置规则</p>
+          <div class="actions">
+            <button id="saveRules">保存设置</button>
+            <button id="updateRules" class="primary">立即更新</button>
+            <span id="rulesMsg" class="muted"></span>
+          </div>
+        </div>
       </section>
 
       <!-- ===== 通用 ===== -->

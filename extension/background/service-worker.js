@@ -4,8 +4,9 @@
 // 关键约束：监听器必须顶层同步注册；SW 会休眠，故状态一律以 chrome.storage 为准，唤醒即用最新值。
 // 架构：已放弃 QUIC/WebTransport，代理走 TCP 443（chrome.proxy HTTPS），无需 offscreen。
 
-import { loadAll, getSettings, setSettings, setRuntime, getSubs, resolveProfile, saveNodes, saveSubs } from '../lib/config.js';
+import { loadAll, getSettings, setSettings, setRuntime, getSubs, resolveProfile, saveNodes, saveSubs, getRulesCache } from '../lib/config.js';
 import { applyProxy, clearProxy } from '../lib/proxy-manager.js';
+import { fetchAndCacheRules } from '../lib/rules.js';
 import { registerAuthListener, initAuthFromStorage } from '../lib/auth.js';
 import { probeLatency } from '../lib/probe.js';
 import * as nodeMgr from '../lib/node-manager.js';
@@ -38,7 +39,8 @@ function stopKeepAlive() {
 // ===== 组装返回给 UI 的完整状态 =====
 async function buildState() {
   const { settings, nodes, subs, runtime } = await loadAll();
-  return { settings, nodes, subs, runtime };
+  const rulesCache = await getRulesCache(); // 供 options 显示“最近更新时间/条数”
+  return { settings, nodes, subs, runtime, rulesCache };
 }
 
 // ===== 套用当前情景模式（Zero Omega 范式核心）：根据 activeProfile 派生 mode+node 并应用 =====
@@ -201,6 +203,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           await setSettings(msg.patch || {});
           await applyActiveProfile(); // 规则/探测间隔等变化后重新套用
           return sendResponse({ ok: true, state: await buildState() });
+        }
+        // 立即更新分流规则：拉取远程列表写入缓存，再用新规则重套当前情景的 PAC
+        case 'updateRules': {
+          const settings = await getSettings();
+          const info = await fetchAndCacheRules(settings);
+          await applyActiveProfile();
+          return sendResponse({ ok: true, info, state: await buildState() });
         }
         // 导入配置：覆盖节点/订阅/设置（options 导入导出用），随后重新套用当前情景模式
         case 'importConfig': {

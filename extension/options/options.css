@@ -36,6 +36,8 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); fo
 label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
 input, select { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: #fff; color: var(--text); width: 100%; }
 input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,115,232,.15); }
+textarea { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-family: ui-monospace, Menlo, Consolas, monospace; background: #fff; color: var(--text); width: 100%; resize: vertical; }
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(26,115,232,.15); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .actions { display: flex; gap: 10px; align-items: center; }
 code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 12px; }

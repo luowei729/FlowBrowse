@@ -88,3 +88,9 @@
 - 【主题】popup/options 均改浅色（白底 + #1a73e8 蓝强调），贴近 Zero Omega。
 - 【保留】白名单+心跳、角标 ON/OFF、内置全量规则、Set 父域匹配均不变。
 - 【验证】无头 e2e（导入订阅→connect→example.com=200）全绿；JS 语法均过。
+
+## 2026-10-20（分流规则：不代理列表 + 更新优化缓存）
+
+- 【不代理列表】新增用户自定义 `customDirect`（强制直连）与 `customProxy`（强制代理），每行一条，支持 `example.com`/`*.example.com`/`1.2.3.4`/`10.0.0.0/8`；裸域自动补 `*.域` 覆盖子域。`parseCustomList` 拆为 glob（交 shExpMatch）+ CIDR 数值段；PAC 在全局/分流两模式都优先应自定义（先不代理、再强制代理，然后才 CN/默认）。
+- 【更新优化】远程规则改为**缓存**：`fetchAndCacheRules` 拉取→写 `fb_rules_cache`；`loadCnData` 连接时只读本地缓存（离线可用、不再每次 fetch）。options 分流规则页新增“立即更新”按钮 + 最近更新时间/条数显示；SW 新增 `updateRules` 动作。
+- 【验证】自定义匹配正确（子域/CIDR/强制代理均命中）；e2e 无回归。

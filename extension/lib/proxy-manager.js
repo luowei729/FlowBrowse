@@ -18,7 +18,7 @@ export async function applyProxy(node, settings) {
 
   // 生成 PAC：global 无需 CN 列表；split 需加载 CN 域名/CIDR
   const cnData = settings.mode === 'split' ? await loadCnData(settings) : { domains: [], cidrs: [] };
-  const pac = buildPac(p.host, p.port, settings.mode, cnData);
+  const pac = buildPac(p.host, p.port, settings.mode, cnData, { direct: settings.customDirect, proxy: settings.customProxy });
 
   // 防御：chrome.proxy 限制 pacScript.data 仅支持 ASCII。若混入非 ASCII（如远程规则异常），
   // 提前抛出中文可读错误，避免 Chrome 返回难懂的拒绝信息、也避免误以为"已连接其实裸奔"。
