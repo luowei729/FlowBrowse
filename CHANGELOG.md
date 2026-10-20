@@ -103,3 +103,4 @@
 - 【自愈】install.sh source 前加 `bash -n` 校验：若旧 .env 含元字符则备份为 .env.bak 并从示例重建，免手动删。
 - 【图标】生成蓝/灰⇄图标，manifest 配 icons+default_icon，updateIcon 用 setIcon(getURL 绝对路径)换色代替大角标。
 - 【文档】README 加一键安装命令；全仓 md 脱敏 sel2 域名/测试 IP 为占位符。
+- 【交互】`install.sh` 在安装最初询问真实域名：当 `DOMAIN` 为空或仍是示例 `example.com` 时，tty 下提示输入并 `sed` 写回 `.env`；非交互终端则明确报错引导手动改 `.env`。（解决“拿示例 example.com 解析到 Cloudflare 当自己域名签证书必失败”）

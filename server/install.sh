@@ -43,6 +43,24 @@ fi
 set -a; . "${ENV_FILE}"; set +a
 export FB_WEB_ROOT="${FB_WEB_ROOT:-$WEB_ROOT_DEFAULT}"
 
+# 域名必填：若仍是示例占位 example.com 或为空，交互式提示输入真实域名并写回 .env。
+#   为什么：autocert 靠域名签发 LE 证书，示例 example.com 是别人的域名（会解析到 Cloudflare），
+#   直接拿去签证书必失败；故在安装最初就把真实域名问出来，后续预检/订阅/证书都用它。
+#   非交互 tty（如管道/CI）无法读取输入，则明确报错引导你手动编辑 .env，避免静默用错域名。
+if [ -z "${DOMAIN:-}" ] || [ "${DOMAIN}" = "example.com" ]; then
+  if [ -t 0 ]; then
+    printf '\033[1;36m[FlowBrowse]\033[0m 请输入你的域名（A 记录已解析到本机公网 IP，用于 autocert 签发证书）: '
+    read -r DOMAIN
+    if [ -z "${DOMAIN:-}" ]; then
+      die "域名不能为空，结束安装。"
+    fi
+    sed -i "s|^DOMAIN=.*|DOMAIN=${DOMAIN}|" "${ENV_FILE}"
+    log "已写入域名 ${DOMAIN} 到 ${ENV_FILE}。"
+  else
+    die "DOMAIN 仍是示例 example.com 且当前非交互终端。请先编辑 ${ENV_FILE} 把 DOMAIN 改为真实域名后重跑（或直接在终端 sudo bash install.sh 交互式安装）。"
+  fi
+fi
+
 changed=0
 if [ -z "${NODE_TOKEN:-}" ] || [ "${NODE_TOKEN}" = "CHANGE_ME_LONG_RANDOM" ]; then
   NODE_TOKEN="$(openssl rand -hex 16)"; sed -i "s|^NODE_TOKEN=.*|NODE_TOKEN=${NODE_TOKEN}|" "${ENV_FILE}"; changed=1
