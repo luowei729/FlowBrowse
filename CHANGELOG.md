@@ -94,3 +94,5 @@
 - 【不代理列表】新增用户自定义 `customDirect`（强制直连）与 `customProxy`（强制代理），每行一条，支持 `example.com`/`*.example.com`/`1.2.3.4`/`10.0.0.0/8`；裸域自动补 `*.域` 覆盖子域。`parseCustomList` 拆为 glob（交 shExpMatch）+ CIDR 数值段；PAC 在全局/分流两模式都优先应自定义（先不代理、再强制代理，然后才 CN/默认）。
 - 【更新优化】远程规则改为**缓存**：`fetchAndCacheRules` 拉取→写 `fb_rules_cache`；`loadCnData` 连接时只读本地缓存（离线可用、不再每次 fetch）。options 分流规则页新增“立即更新”按钮 + 最近更新时间/条数显示；SW 新增 `updateRules` 动作。
 - 【验证】自定义匹配正确（子域/CIDR/强制代理均命中）；e2e 无回归。
+- 【修复】切换报“PAC 含非 ASCII”：原因是我在 split 模式 PAC 模板里写了一行**中文注释**（chrome.proxy 仅允许 ASCII）。改为英文注释；验证 global/split PAC 均无 ASCII 外字符。（教训：PAC 模板内注释必须英文，proxy-manager 的 ASCII 校验会兜底报错）
+- 【优化】域名远程源默认预填推荐地址（jsDelivr Loyalsoldier/clash-rules direct.txt），与 IP 框 china.txt 对称；两框都预填但“使用远程”默认关=用内置。

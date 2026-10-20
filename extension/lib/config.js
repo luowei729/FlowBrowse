@@ -27,8 +27,9 @@ export const DEFAULT_SETTINGS = {
   autoConnectOnStartup: false,
   probeIntervalMinutes: 10,  // 周期探测间隔
   rulesRemoteEnabled: false, // 默认用内置完整规则（已含全量 CN IP 段）；需要自动更新时再开启
-  // 内置已预置全量 CN IP 段；下列为可选的国内可直连远程源（jsDelivr CDN）
-  rulesRemoteUrlDomains: '', // 域名源留空=用内置；可填 Clash YAML/纯文本域名列表 URL
+  // 内置已预置全量 CN IP 段；下列为可选的国内可直连远程源（jsDelivr CDN），两框都预填推荐地址保持对称；
+  //   默认“使用远程”开关为关=用内置，开启并点“立即更新”才拉取生效。
+  rulesRemoteUrlDomains: 'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt', // “应直连”域名清单(Clash YAML)
   rulesRemoteUrlCidrs: 'https://cdn.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt',
   // 用户自定义地址列表（每行一条，支持 example.com / *.example.com / 1.2.3.4 / 10.0.0.0/8）
   customDirect: '',          // 不代理（强制直连）列表：优先于一切，命中走 DIRECT

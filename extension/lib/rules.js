@@ -184,7 +184,7 @@ function FindProxyForURL(url, host) {
       shExpMatch(host, '172.16.*') || shExpMatch(host, '172.17.*') ||
       shExpMatch(host, '172.18.*') || shExpMatch(host, '172.19.*') || shExpMatch(host, '172.2*') ||
       shExpMatch(host, '172.30.*') || shExpMatch(host, '172.31.*')) return 'DIRECT';
-  // 用户自定义列表优先（不代理 / 强制代理）
+  // User custom lists take priority (force-direct / force-proxy)
   if (inGlobs(CD_G, host) || inNets(CD_N, host)) return 'DIRECT';
   if (inGlobs(CP_G, host) || inNets(CP_N, host)) return '${proxyLine}';
   // IP literal by CIDR, domain by suffix; CN => DIRECT, otherwise via HTTPS(TLS) proxy
