@@ -7,9 +7,9 @@
 
 | 项 | 值 | 备注 |
 |---|---|---|
-| 主机 IP | `193.123.230.166` | Ubuntu 24.04 |
+| 主机 IP | `<服务器公网IP>` | Ubuntu 24.04 |
 | SSH 用户 | `root` | 登录口令：现场提供，**不入库** |
-| 域名 | `sel2.lkz.pub` | 已解析到该主机 |
+| 域名 | `<你的域名>` | 已解析到该主机 |
 | 站点证书 | Let's Encrypt | 由服务内 autocert 自动签发/续期（HTTP-01） |
 | 代理+订阅+首页 | TCP 443 | 单一 Go 服务复用（CONNECT=代理、GET=订阅/首页） |
 | 访问控制 | 自动 IP 白名单 | 拉到有效订阅 URL 的客户端 IP 自动放行（TTL 30天） |
@@ -19,7 +19,7 @@
 
 ## 需要准备的凭据项（值均为占位符，运行时注入 .env）
 
-- `DOMAIN` = `sel2.lkz.pub`
+- `DOMAIN` = `<你的域名>`
 - `NODE_NAME` = 节点显示名（例：`FlowBrowse-SG`）
 - `AUTH_USER` / `AUTH_PASS` = 可选 Basic 凭据（默认 `FB_PROXY_AUTH=off` 不用；访问控制靠 IP 白名单）
 - `NODE_TOKEN` = 订阅接口访问 token（密钥路径段，兼作白名单凭证；占位符，勿提交真实值）

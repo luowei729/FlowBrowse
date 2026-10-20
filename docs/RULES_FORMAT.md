@@ -9,7 +9,7 @@ fb://<USER>:<PASS>@<domain>:<tcp_port>/?region=<地区>&name=<节点显示名>
 | 组成 | 含义 | 默认/示例 |
 |---|---|---|
 | `USER:PASS` | 可选 Basic 凭据（默认服务靠 IP 白名单，不强制校验） | `u1:p2` |
-| `domain:tcp_port` | HTTPS 转发代理地址（与订阅共用同一 TCP 443） | `sel2.lkz.pub:443` |
+| `domain:tcp_port` | HTTPS 转发代理地址（与订阅共用同一 TCP 443） | `<你的域名>:443` |
 | `region=` | 地区标签（UI 展示、分组） | `SG` |
 | `name=` | 节点显示名 | `FlowBrowse-新加坡` |
 
@@ -24,7 +24,7 @@ fb://<USER>:<PASS>@<domain>:<tcp_port>/?region=<地区>&name=<节点显示名>
 
 ### 示例
 ```
-fb://u1:p2@sel2.lkz.pub:443/?udp=443&region=SG&name=FlowBrowse-%E6%96%B0%E5%8A%A0%E5%9D%A1
+fb://u1:p2@<你的域名>:443/?region=SG&name=FlowBrowse-%E6%96%B0%E5%8A%A0%E5%9D%A1
 ```
 
 ## 2. 订阅接口
@@ -36,10 +36,10 @@ fb://u1:p2@sel2.lkz.pub:443/?udp=443&region=SG&name=FlowBrowse-%E6%96%B0%E5%8A%A
 - `GET https://<domain>:<tcp_port>/<NODE_TOKEN>/<FB_SUB_FILE>.json`
   - 返回结构化：
     ```json
-    { "nodes": [ { "name":"FlowBrowse-SG","region":"SG","host":"<domain>","tcp_port":443,"udp_port":443,"scheme":"https","user":"u1","has_pass":true } ] }
+    { "nodes": [ { "name":"FlowBrowse-SG","region":"SG","host":"<domain>","tcp_port":443,"scheme":"https","user":"u1","has_pass":true } ] }
     ```
 - 未知/错误 token 路径 → 命中不到文件 → `404`，不泄露任何节点信息。
-- 域名与 tcp/udp 端口均来自 `.env`（`DOMAIN`/`FB_TCP_PORT`/`FB_WT_PORT`），无硬编码；测试默认域名 `sel2.lkz.pub`。
+- 域名与端口均来自 `.env`（`DOMAIN`/`FB_TCP_PORT`），无硬编码；代理与订阅共用同一 TCP 端口（示例 `<你的域名>:443`）。
 
 ## 3. 分流规则（PAC 生成输入）
 

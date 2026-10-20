@@ -17,12 +17,18 @@ registerAuthListener();
 // SW 每次唤醒都从 storage 预热代理凭据（若启用鉴权）到内存
 initAuthFromStorage();
 
-// ===== #2 工具栏角标：一眼判断开/关 =====
+// ===== #2 工具栏图标：蓝=开启、灰=关闭（用换色图标区分，不再用大文字角标——角标会遮住图标）=====
 function updateIcon(connected) {
   try {
-    chrome.action.setBadgeBackgroundColor({ color: connected ? '#16a34a' : '#9ca3af' });
-    chrome.action.setBadgeText({ text: connected ? 'ON' : 'OFF' });
-    chrome.action.setTitle({ title: connected ? 'FlowBrowse：已连接（代理开启）' : 'FlowBrowse：未连接' });
+    const s = connected ? 'on' : 'off';
+    // MV3 SW 里 setIcon 相对路径会 fetch 失败，必须用 chrome.runtime.getURL 取绝对 URL（实测）
+    chrome.action.setIcon({ path: {
+      16: chrome.runtime.getURL(`icons/icon-${s}-16.png`),
+      32: chrome.runtime.getURL(`icons/icon-${s}-32.png`),
+      48: chrome.runtime.getURL(`icons/icon-${s}-48.png`),
+    } });
+    chrome.action.setBadgeText({ text: '' }); // 清空角标
+    chrome.action.setTitle({ title: connected ? 'FlowBrowse：已连接（代理开启）' : 'FlowBrowse：未连接（直接连接）' });
   } catch (_) {}
 }
 

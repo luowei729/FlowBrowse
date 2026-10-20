@@ -31,7 +31,7 @@
   - 删除 server/caddy、server/systemd/{caddy,wt,reload}，新增 flowbrowse.service 单单元。
 - 【快速脚本】`flowbrowse.sh` 菜单/子命令改为单服务(install/uninstall/status/restart/sub/renew/logs/info)；install.sh 支持预编译下载(GitHub Actions)+回退编译、按 amd64/arm64 自动选、覆盖前停服务、UDP 缓冲区 sysctl。
 - 【GitHub Actions】`.github/workflows/build.yml`：按 tag 交叉编译 linux amd64/arm64 单一二进制并发布 Release；服务器纯下载不编译。
-- 【真实服务器验证通过】在 193.123.230.166 / sel2.lkz.pub 实测：
+- 【真实服务器验证通过】在 <服务器公网IP> / <你的域名> 实测：
   - 首页 GET→200 空body；无凭据 CONNECT→407；有凭据 CONNECT example→200、gstatic→204（转发真实可用）；
   - 错误 token→404（防枚举）；autocert 成功签发 LE 证书；UDP443 WebTransport 监听。
   - 真实 Chrome 内核端到端：导入真机订阅→connect→chrome.proxy=pac_script 生效→断开还原，全通过。
