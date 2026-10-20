@@ -127,3 +127,11 @@
 - 【新模块】`extension/lib/whitelist.js` 封装 `/<FB_ADMIN_TOKEN>/allow` 的 list/add/del（fetch no-store、token 路径段编码、非2xx带提示抛错）。SW 新增动作 wlSave/wlList/wlAdd/wlDel；`buildState` 回传 wl；服务器留空时 `defaultWlServer()` 取当前节点 host:port。因 PAC 已将代理域名设 DIRECT，“上报我当前IP”带的是本机真实出口 IP。
 - 【安全】管理密钥单独存 `fb_wl` 键（config.js 新增 getWl/setWl），**不进“导入/导出”的 settings JSON**，防泄密。
 - 【验证】无头 smoke：选项页加载无错、白名单页可切换、控件齐备、fb_wl 落盘正确且 token 未混入 settings、无可用地址时优雅报错。（端到端成功需目标服务器已部 v0.4.3 带上报接口的二进制）
+
+## 2026-10-20（管理密钥随订阅下发，切节点无需重填）
+
+- 【痛点】用户反馈：每台服务器 FB_ADMIN_TOKEN 随机不同，切到别的服务器节点就得重填密钥，麻烦。
+- 【方案】把管理密钥随订阅一起下发：`gen-sub-link.sh` 在 fb:// 链接末尾追加 `&admin=<FB_ADMIN_TOKEN>`（install.sh 传入该变量）；`subscription.js` 解析 `admin`→节点 `adminToken`；`node-manager.js` normalize 保留；options 节点表单加可选“白名单管理密钥”字段。
+- 【自动取用】SW 新增 `resolveWlToken()`：手填全局密钥优先，否则取当前节点的 `adminToken`（订阅带入）；服务器同理 `resolveWlServer()`。于是“IP 白名单”页两个字段都留空即可自动跟随当前节点，切节点自动换密钥。
+- 【安全权衡】订阅本就含代理凭据且在密钥路径下，多带一个 admin 不扩大信任边界（拿到订阅者本就能自拉自入白名单）；但 admin 可加任意 IP/删除，权限更大，故仍靠订阅 URL 不可猜保护。
+- 【验证】无头 smoke：种一个自带 adminToken 的节点、不设全局密钥，刷新列表能走到 fetch（不再报“未设置管理密钥”），证明自动取用生效。无需重编服务端二进制（仅改 shell 脚本与扩展）；用户需 git pull 后重跑 install/sub 重生订阅并重导入。

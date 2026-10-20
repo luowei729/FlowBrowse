@@ -3,7 +3,7 @@
 ## 1. FlowBrowse 节点链接 `fb://`（借鉴 hy2 URI 约定，非 Hysteria2 协议）
 
 ```
-fb://<USER>:<PASS>@<domain>:<tcp_port>/?region=<地区>&name=<节点显示名>
+fb://<USER>:<PASS>@<domain>:<tcp_port>/?region=<地区>&name=<节点显示名>&admin=<白名单管理密钥>
 ```
 
 | 组成 | 含义 | 默认/示例 |
@@ -12,15 +12,16 @@ fb://<USER>:<PASS>@<domain>:<tcp_port>/?region=<地区>&name=<节点显示名>
 | `domain:tcp_port` | HTTPS 转发代理地址（与订阅共用同一 TCP 443） | `<你的域名>:443` |
 | `region=` | 地区标签（UI 展示、分组） | `SG` |
 | `name=` | 节点显示名 | `FlowBrowse-新加坡` |
+| `admin=` | 白名单上报接口管理密钥（FB_ADMIN_TOKEN）；插件按当前节点自动取用，切节点无需重填 | `baa6e7…` |
 
-> v0.4.0 起已放弃 QUIC，**不再有 `udp=` 字段**（旧链接若带 `udp=` 会被忽略，向后兼容）。
+> v0.4.0 起已放弃 QUIC，**不再有 `udp=` 字段**（旧链接若带 `udp=` 会被忽略，向后兼容）。旧订阅无 `admin=` 时，插件“IP 白名单”页可手填密钥。
 
 ### 解析规则
 1. scheme 必须为 `fb`，否则忽略。
 2. userinfo 取 `USER:PASS`；host:port 取 TCP 代理地址。
-3. query 解析 `region`/`name`；`name` 缺失时默认 host。
+3. query 解析 `region`/`name`/`admin`；`name` 缺失时默认 host。
 4. `name`/`region` 需 URL 解码（支持中文）。
-5. 生成节点对象：`{source:'subscribe', name, region, proxy:{host,port,scheme:'https',user,pass}, wtPort}`。
+5. 生成节点对象：`{source:'subscribe', name, region, proxy:{host,port,scheme:'https',user,pass}, wtPort, adminToken}`。
 
 ### 示例
 ```

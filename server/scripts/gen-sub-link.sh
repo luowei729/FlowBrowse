@@ -23,6 +23,8 @@ FB_SUB_FILE="${FB_SUB_FILE:?FB_SUB_FILE 未设置}"
 NODE_NAME="${NODE_NAME:-FlowBrowse}"
 NODE_REGION="${NODE_REGION:-N/A}"
 FB_WEB_ROOT="${FB_WEB_ROOT:-/srv/flowbrowse}"
+# 白名单上报接口的管理密钥（可选）：随订阅下发，插件按当前节点自动取用，切换节点无需重填
+FB_ADMIN_TOKEN="${FB_ADMIN_TOKEN:-}"
 
 # URL 编码函数：把用户名/密码/名称等可能含特殊字符的字段安全嵌入 fb:// 链接。
 # 原因：fb:// 借鉴 hy2 的 URI 结构，userinfo 与 query 值需百分号编码，否则解析歧义（如密码含 @ / 会混淆 host）。
@@ -40,6 +42,10 @@ PASS_ENC="$(urlencode "$AUTH_PASS")"
 
 # 组装单条 fb:// 链接（代理端口=FB_TCP_PORT，与订阅共用 TCP 443；格式规范见 docs/RULES_FORMAT.md）
 FB_LINK="fb://${USER_ENC}:${PASS_ENC}@${DOMAIN}:${FB_TCP_PORT}/?region=${REGION_ENC}&name=${NAME_ENC}"
+# 带上管理密钥（十六进制、URL 安全）：插件导入订阅后，每个节点自带其服务器的白名单管理密钥
+if [ -n "${FB_ADMIN_TOKEN}" ]; then
+  FB_LINK="${FB_LINK}&admin=${FB_ADMIN_TOKEN}"
+fi
 
 # 订阅地址：同一 TCP 443（对外像正常网站）+ 密钥目录段 $NODE_TOKEN + 随机文件名 $FB_SUB_FILE
 SUB_URL="https://${DOMAIN}:${FB_TCP_PORT}/${NODE_TOKEN}/${FB_SUB_FILE}"

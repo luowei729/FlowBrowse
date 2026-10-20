@@ -15,6 +15,8 @@ function normalize(input) {
       pass: proxy.pass || '',
     },
     wtPort: parseInt(input.wtPort, 10) || 443,
+    // 白名单管理密钥（订阅带入或手动填）：保留到节点，供 options “IP 白名单”页自动取用
+    adminToken: (input.adminToken || '').trim(),
   };
 }
 

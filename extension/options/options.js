@@ -113,6 +113,7 @@ function openNodeForm(n) {
   $('nTcp').value = n ? n.proxy.port || '' : '443';
   $('nUser').value = n ? n.proxy.user || '' : '';
   $('nPass').value = n ? n.proxy.pass || '' : '';
+  $('nAdmin').value = n ? n.adminToken || '' : '';
   $('nodeForm').scrollIntoView({ behavior: 'smooth' });
 }
 function closeNodeForm() { $('nodeForm').hidden = true; $('nodeForm').reset(); $('nodeId').value = ''; }
@@ -123,6 +124,7 @@ $('nodeForm').addEventListener('submit', async (e) => {
   const input = {
     name: $('nName').value.trim() || $('nHost').value.trim(),
     region: $('nRegion').value.trim(),
+    adminToken: $('nAdmin').value.trim(),
     proxy: {
       host: $('nHost').value.trim(),
       port: parseInt($('nTcp').value, 10) || 443,

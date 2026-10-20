@@ -43,6 +43,19 @@ iptables -A FORWARD -p tcp -d <B_IP> --dport 80 -j ACCEPT
 apt-get install -y iptables-persistent && netfilter-persistent save
 ```
 
+### 3.2.1 中转机对外端口不是 443（如 59443）时—端口必须一致
+
+若中转机因 443 被占、只能用高端口（例 `59443`）对外，则**浏览器拨的端口 = 订阅广播的端口 = 中转机对外端口**，三者必须一致，否则拨到中转机 443（未监听）会连不上。
+
+源站程序用同一个 `FB_TCP_PORT` 既做监听口又做订阅里的广播口，故把它设成中转机的对外端口即可（无需改代码）：
+```bash
+# 源站：对外端口改为中转机的 59443（监听 59443 + 订阅广播 59443）；ACME 仍走 80 不动
+sudo sed -i 's|^FB_TCP_PORT=.*|FB_TCP_PORT=59443|' /etc/flowbrowse/.env
+cd ~/FlowBrowse/server && sudo bash flowbrowse.sh install   # 重新生成订阅(端口变 59443)并重启
+# 中转机对应改为透传 59443 → 源站真实IP:59443
+```
+新订阅会变成 `https://<域名>:59443/<token>/<file>`，插件重新导入即可。（若希望源站仍监听 443、只对外广播 59443，需新增 FB_ADVERTISE_PORT 分离监听/广播端口，属后续可选项。）
+
 ### 3.3 防火墙 / 云安全组
 - 中转机 F：放行 **TCP 443**（+ TCP 80 若续期走它）。
 - 源站 B：安全组放行来自 **F** 的 TCP 443/80（若 B 仅对内网开放则更隐蔽）。

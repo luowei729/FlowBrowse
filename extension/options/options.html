@@ -47,6 +47,7 @@
             <label>端口<input id="nTcp" type="number" min="1" max="65535" placeholder="443" /></label>
             <label>用户名<input id="nUser" type="text" placeholder="可选" /></label>
             <label>密码<input id="nPass" type="text" placeholder="可选" /></label>
+            <label>白名单管理密钥<input id="nAdmin" type="text" placeholder="可选；订阅带入则留空" /></label>
           </div>
           <div class="actions">
             <button type="submit" class="primary" id="nodeSubmit">保存</button>
@@ -106,13 +107,13 @@
       <!-- ===== IP 白名单管理 ===== -->
       <section class="page" data-page="whitelist" hidden>
         <h2>IP 白名单管理</h2>
-        <p class="muted">管理服务器允许连接代理的 IP/网段（经端口转发时把中转机 IP 加进来）。调用服务端上报接口，需填安装时生成的「管理密钥 FB_ADMIN_TOKEN」。服务器留空=用当前节点地址。</p>
+        <p class="muted">管理服务器允许连接代理的 IP/网段（经端口转发时把中转机 IP 加进来）。服务器与管理密钥都留空时，自动用“当前节点”自带的地址与密钥（导入订阅时由服务端带入），切换节点自动跟随、无需重填；也可手填覆盖。</p>
 
         <div class="panel">
-          <h3>连接参数</h3>
+          <h3>连接参数（均可留空）</h3>
           <div class="cols">
-            <label>服务器 host:port<input id="wlServer" type="text" placeholder="留空=当前节点，如 hk1.lkz.pub:443" /></label>
-            <label>管理密钥 FB_ADMIN_TOKEN<input id="wlToken" type="text" placeholder="安装完成时打印的令牌" /></label>
+            <label>服务器 host:port<input id="wlServer" type="text" placeholder="留空=当前节点地址" /></label>
+            <label>管理密钥 FB_ADMIN_TOKEN<input id="wlToken" type="text" placeholder="留空=当前节点自带密钥" /></label>
           </div>
           <div class="actions"><button id="wlSave" class="primary">保存参数</button><span id="wlCfgMsg" class="muted"></span></div>
         </div>

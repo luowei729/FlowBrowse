@@ -45,6 +45,8 @@ export function parseFbLink(link) {
       region: dec(p.get('region') || ''),
       proxy: { host: dec(host), port, scheme: 'https', user: dec(user), pass: dec(pass) },
       wtPort: p.get('udp') ? parseInt(p.get('udp'), 10) : 443,
+      // 白名单上报接口管理密钥：随订阅下发，节点自带，切换节点时插件自动取用（旧链接无此字段则为空）
+      adminToken: p.get('admin') ? dec(p.get('admin')) : '',
     };
   } catch (e) {
     console.warn('[FlowBrowse] fb:// 解析失败：', link, e);

@@ -66,6 +66,16 @@ async function resolveWlServer() {
   return cfg.server ? cfg.server : await defaultWlServer();
 }
 
+// 解析白名单管理密钥：优先用手填的全局密钥，否则取当前节点的自带密钥（订阅带入）——切换节点自动换密钥，无需重填
+async function resolveWlToken() {
+  const cfg = await getWl();
+  if (cfg.token) return cfg.token;
+  const { settings, nodes } = await loadAll();
+  const { node } = resolveProfile(settings, nodes);
+  const n = node || nodes[0];
+  return (n && n.adminToken) || '';
+}
+
 // ===== 套用当前情景模式（Zero Omega 范式核心）：根据 activeProfile 派生 mode+node 并应用 =====
 async function applyActiveProfile() {
   const { settings, nodes } = await loadAll();
@@ -250,27 +260,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return sendResponse({ ok: true });
         }
         case 'wlList': {
-          const cfg = await getWl();
-          if (!cfg.token) return sendResponse({ ok: false, error: '未设置管理密钥' });
+          const token = await resolveWlToken();
+          if (!token) return sendResponse({ ok: false, error: '未设置管理密钥（且当前节点未自带，请导入带密钥的订阅或手填）' });
           const server = await resolveWlServer();
           if (!server) return sendResponse({ ok: false, error: '无可用服务器地址（请添加节点或手填）' });
-          const data = await wlList(server, cfg.token);
+          const data = await wlList(server, token);
           return sendResponse({ ok: true, data, server });
         }
         case 'wlAdd': {
-          const cfg = await getWl();
-          if (!cfg.token) return sendResponse({ ok: false, error: '未设置管理密钥' });
+          const token = await resolveWlToken();
+          if (!token) return sendResponse({ ok: false, error: '未设置管理密钥（且当前节点未自带）' });
           const server = await resolveWlServer();
           if (!server) return sendResponse({ ok: false, error: '无可用服务器地址' });
-          const text = await wlAdd(server, cfg.token, msg.target, msg.ttl);
+          const text = await wlAdd(server, token, msg.target, msg.ttl);
           return sendResponse({ ok: true, text, server });
         }
         case 'wlDel': {
-          const cfg = await getWl();
-          if (!cfg.token) return sendResponse({ ok: false, error: '未设置管理密钥' });
+          const token = await resolveWlToken();
+          if (!token) return sendResponse({ ok: false, error: '未设置管理密钥（且当前节点未自带）' });
           const server = await resolveWlServer();
           if (!server) return sendResponse({ ok: false, error: '无可用服务器地址' });
-          const text = await wlDel(server, cfg.token, msg.target);
+          const text = await wlDel(server, token, msg.target);
           return sendResponse({ ok: true, text, server });
         }
         default:

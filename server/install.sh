@@ -175,7 +175,7 @@ systemctl enable flowbrowse >/dev/null 2>&1 || true
 # ---------- 5) 生成订阅（先起服务可能还没证书，订阅文件独立生成）----------
 log "生成订阅文件..."
 SUB_OUT="$(AUTH_USER="${AUTH_USER}" AUTH_PASS="${AUTH_PASS}" DOMAIN="${DOMAIN}" \
-  FB_TCP_PORT="${FB_TCP_PORT}" NODE_TOKEN="${NODE_TOKEN}" FB_SUB_FILE="${FB_SUB_FILE}" \
+  FB_TCP_PORT="${FB_TCP_PORT}" NODE_TOKEN="${NODE_TOKEN}" FB_SUB_FILE="${FB_SUB_FILE}" FB_ADMIN_TOKEN="${FB_ADMIN_TOKEN}" \
   NODE_NAME="${NODE_NAME:-FlowBrowse}" NODE_REGION="${NODE_REGION:-N/A}" FB_WEB_ROOT="${FB_WEB_ROOT}" \
   bash "${SCRIPT_DIR}/scripts/gen-sub-link.sh")"
 chown -R flowbrowse:flowbrowse "${FB_WEB_ROOT}"
