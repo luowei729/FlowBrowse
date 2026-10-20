@@ -43,11 +43,20 @@ export const DEFAULT_RUNTIME = {
   lastProbe: {},             // { [nodeId]: { rttMs, ok, at } }
 };
 
+// 归一化：旧数据可能把远程 URL 存成了空串（会盖掉新默认），这里把空值回填为推荐默认，保证 UI 能看到默认地址。
+//   远程开关默认关=用内置，故 URL 值在关闭时不生效，回填安全。
+function normalizeSettings(s) {
+  const m = { ...DEFAULT_SETTINGS, ...s };
+  if (!m.rulesRemoteUrlDomains) m.rulesRemoteUrlDomains = DEFAULT_SETTINGS.rulesRemoteUrlDomains;
+  if (!m.rulesRemoteUrlCidrs) m.rulesRemoteUrlCidrs = DEFAULT_SETTINGS.rulesRemoteUrlCidrs;
+  return m;
+}
+
 // 读整包（一次取齐，减少异步次数）
 export async function loadAll() {
   const data = await chrome.storage.local.get(Object.values(KEYS));
   return {
-    settings: { ...DEFAULT_SETTINGS, ...(data[KEYS.SETTINGS] || {}) },
+    settings: normalizeSettings(data[KEYS.SETTINGS] || {}),
     nodes: data[KEYS.NODES] || [],
     subs: data[KEYS.SUBS] || [],
     runtime: { ...DEFAULT_RUNTIME, ...(data[KEYS.RUNTIME] || {}) },
@@ -57,13 +66,13 @@ export async function loadAll() {
 // 局部写入：仅覆盖传入的键，避免并发读整包再写导致相互覆盖
 export async function setSettings(patch) {
   const cur = (await chrome.storage.local.get(KEYS.SETTINGS))[KEYS.SETTINGS] || {};
-  const next = { ...DEFAULT_SETTINGS, ...cur, ...patch };
+  const next = { ...normalizeSettings(cur), ...patch };
   await chrome.storage.local.set({ [KEYS.SETTINGS]: next });
   return next;
 }
 export async function getSettings() {
   const cur = (await chrome.storage.local.get(KEYS.SETTINGS))[KEYS.SETTINGS] || {};
-  return { ...DEFAULT_SETTINGS, ...cur };
+  return normalizeSettings(cur);
 }
 
 export async function saveNodes(nodes) {
