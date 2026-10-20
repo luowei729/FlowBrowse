@@ -4,9 +4,10 @@
 // 关键约束：监听器必须顶层同步注册；SW 会休眠，故状态一律以 chrome.storage 为准，唤醒即用最新值。
 // 架构：已放弃 QUIC/WebTransport，代理走 TCP 443（chrome.proxy HTTPS），无需 offscreen。
 
-import { loadAll, getSettings, setSettings, setRuntime, getSubs, resolveProfile, saveNodes, saveSubs, getRulesCache } from '../lib/config.js';
+import { loadAll, getSettings, setSettings, setRuntime, getSubs, resolveProfile, saveNodes, saveSubs, getRulesCache, getWl, setWl } from '../lib/config.js';
 import { applyProxy, clearProxy } from '../lib/proxy-manager.js';
 import { fetchAndCacheRules } from '../lib/rules.js';
+import { wlList, wlAdd, wlDel } from '../lib/whitelist.js';
 import { registerAuthListener, initAuthFromStorage } from '../lib/auth.js';
 import { probeLatency } from '../lib/probe.js';
 import * as nodeMgr from '../lib/node-manager.js';
@@ -46,7 +47,23 @@ function stopKeepAlive() {
 async function buildState() {
   const { settings, nodes, subs, runtime } = await loadAll();
   const rulesCache = await getRulesCache(); // 供 options 显示“最近更新时间/条数”
-  return { settings, nodes, subs, runtime, rulesCache };
+  const wl = await getWl();                 // IP 白名单管理参数（服务器/密钥），供 options 回填
+  return { settings, nodes, subs, runtime, rulesCache, wl };
+}
+
+// 默认白名单服务器地址：未手动填写时取当前情景节点（或首个节点）的 host:port
+async function defaultWlServer() {
+  const { settings, nodes } = await loadAll();
+  const { node } = resolveProfile(settings, nodes);
+  const n = node || nodes[0];
+  if (n && n.proxy && n.proxy.host) return `${n.proxy.host}:${n.proxy.port || 443}`;
+  return '';
+}
+
+// 解析白名单操作的目标服务器：优先用已存 server，空则回退当前节点
+async function resolveWlServer() {
+  const cfg = await getWl();
+  return cfg.server ? cfg.server : await defaultWlServer();
 }
 
 // ===== 套用当前情景模式（Zero Omega 范式核心）：根据 activeProfile 派生 mode+node 并应用 =====
@@ -225,6 +242,36 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           if (d.settings) await setSettings(d.settings);
           await applyActiveProfile();
           return sendResponse({ ok: true, state: await buildState() });
+        }
+        // ===== IP 白名单管理（调服务端上报接口 /<FB_ADMIN_TOKEN>/allow）=====
+        // 保存管理参数（服务器地址/密钥）到独立键 fb_wl，不进导出；不触发重套 PAC
+        case 'wlSave': {
+          await setWl({ server: (msg.server || '').trim(), token: msg.token || '' });
+          return sendResponse({ ok: true });
+        }
+        case 'wlList': {
+          const cfg = await getWl();
+          if (!cfg.token) return sendResponse({ ok: false, error: '未设置管理密钥' });
+          const server = await resolveWlServer();
+          if (!server) return sendResponse({ ok: false, error: '无可用服务器地址（请添加节点或手填）' });
+          const data = await wlList(server, cfg.token);
+          return sendResponse({ ok: true, data, server });
+        }
+        case 'wlAdd': {
+          const cfg = await getWl();
+          if (!cfg.token) return sendResponse({ ok: false, error: '未设置管理密钥' });
+          const server = await resolveWlServer();
+          if (!server) return sendResponse({ ok: false, error: '无可用服务器地址' });
+          const text = await wlAdd(server, cfg.token, msg.target, msg.ttl);
+          return sendResponse({ ok: true, text, server });
+        }
+        case 'wlDel': {
+          const cfg = await getWl();
+          if (!cfg.token) return sendResponse({ ok: false, error: '未设置管理密钥' });
+          const server = await resolveWlServer();
+          if (!server) return sendResponse({ ok: false, error: '无可用服务器地址' });
+          const text = await wlDel(server, cfg.token, msg.target);
+          return sendResponse({ ok: true, text, server });
         }
         default:
           return sendResponse({ ok: false, error: '未知动作: ' + (msg && msg.action) });

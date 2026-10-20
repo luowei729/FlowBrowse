@@ -119,3 +119,11 @@
 - 【上报接口】`GET/POST /<FB_ADMIN_TOKEN>/allow`：`add=auto|<ip|cidr>`(&`ttl=`小时)/`del=`/`list=1`，无参默认上报调用来源 IP。由独立管理密钥保护，留空=禁用。
 - 【安装】`.env.example` 新增两键；install.sh 自动随机化 `FB_ADMIN_TOKEN`（旧 .env 无此键也能补写）、确保 `FB_PROXY_ALLOW_STATIC` 键存在、完成横幅打印上报 URL。
 - 【文档】新建 `docs/PORT_FORWARDING.md`（DNS+iptables+安全组+白名单放行全步骤）；SERVER_DEPLOY/THREAT_MODEL/DEPLOY_CREDENTIALS/DEVTIPS/AGENTS 同步。（待 Actions 编译新二进制后部署到服务器）
+
+## 2026-10-20（扩展新增 IP 白名单管理页）
+
+- 【需求】用户要在插件上直接管理 IP 白名单（而非只能 curl 上报接口）。
+- 【实现】options 新增侧栏页“IP 白名单”：服务器 host:port + 管理密钥输入与保存、“上报我当前IP”、按 IP/CIDR(+选填 TTL)添加、刷新列表、动态项逐行删除；静态项只展不可删。
+- 【新模块】`extension/lib/whitelist.js` 封装 `/<FB_ADMIN_TOKEN>/allow` 的 list/add/del（fetch no-store、token 路径段编码、非2xx带提示抛错）。SW 新增动作 wlSave/wlList/wlAdd/wlDel；`buildState` 回传 wl；服务器留空时 `defaultWlServer()` 取当前节点 host:port。因 PAC 已将代理域名设 DIRECT，“上报我当前IP”带的是本机真实出口 IP。
+- 【安全】管理密钥单独存 `fb_wl` 键（config.js 新增 getWl/setWl），**不进“导入/导出”的 settings JSON**，防泄密。
+- 【验证】无头 smoke：选项页加载无错、白名单页可切换、控件齐备、fb_wl 落盘正确且 token 未混入 settings、无可用地址时优雅报错。（端到端成功需目标服务器已部 v0.4.3 带上报接口的二进制）

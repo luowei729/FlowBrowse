@@ -69,3 +69,10 @@ ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 ul.list li { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .sub-head { display: flex; flex-direction: column; gap: 2px; }
 .sub-head b { font-size: 14px; }
+
+/* IP 白名单列表 */
+.wl-sec { font-weight: 600; color: var(--muted); font-size: 12px; margin: 8px 0 4px; }
+.wl-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.wl-row + .wl-row { margin-top: 6px; }
+.wl-row .val { word-break: break-all; }
+.wl-empty { color: var(--muted); font-size: 13px; padding: 2px 0; }

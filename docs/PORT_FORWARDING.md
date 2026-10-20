@@ -65,6 +65,7 @@ apt-get install -y iptables-persistent && netfilter-persistent save
    curl "https://hk1.lkz.pub/<FB_ADMIN_TOKEN>/allow?del=<IP>"         # 删除动态项(静态不可删)
    ```
    `FB_ADMIN_TOKEN` 由 install 自动生成在 `.env`，**属机密、勿外泄**（留空则上报接口禁用）。
+   > 无需 curl 的图形化方式：浏览器扩展 options → “IP 白名单”页，填入服务器与同一管理密钥，即可“上报我当前IP”/按 IP或CIDR 添加/刷新列表/删除动态项。
 
 ## 4. 验证
 

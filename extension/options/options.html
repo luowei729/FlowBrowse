@@ -15,6 +15,7 @@
         <a data-page="profiles" class="active">情景模式</a>
         <a data-page="subscriptions">订阅</a>
         <a data-page="rules">分流规则</a>
+        <a data-page="whitelist">IP 白名单</a>
         <a data-page="general">通用</a>
         <a data-page="io">导入/导出</a>
       </nav>
@@ -99,6 +100,41 @@
             <button id="updateRules" class="primary">立即更新</button>
             <span id="rulesMsg" class="muted"></span>
           </div>
+        </div>
+      </section>
+
+      <!-- ===== IP 白名单管理 ===== -->
+      <section class="page" data-page="whitelist" hidden>
+        <h2>IP 白名单管理</h2>
+        <p class="muted">管理服务器允许连接代理的 IP/网段（经端口转发时把中转机 IP 加进来）。调用服务端上报接口，需填安装时生成的「管理密钥 FB_ADMIN_TOKEN」。服务器留空=用当前节点地址。</p>
+
+        <div class="panel">
+          <h3>连接参数</h3>
+          <div class="cols">
+            <label>服务器 host:port<input id="wlServer" type="text" placeholder="留空=当前节点，如 hk1.lkz.pub:443" /></label>
+            <label>管理密钥 FB_ADMIN_TOKEN<input id="wlToken" type="text" placeholder="安装完成时打印的令牌" /></label>
+          </div>
+          <div class="actions"><button id="wlSave" class="primary">保存参数</button><span id="wlCfgMsg" class="muted"></span></div>
+        </div>
+
+        <div class="panel">
+          <h3>添加放行项</h3>
+          <div class="cols">
+            <label>IP 或 CIDR<input id="wlAddTarget" type="text" placeholder="如 1.2.3.4 或 10.0.0.0/8；留空=上报本机当前IP" /></label>
+            <label>有效期(小时，选填)<input id="wlAddTtl" type="number" min="1" placeholder="默认用服务器设置" /></label>
+          </div>
+          <div class="actions">
+            <button id="wlAddBtn" class="primary">添加</button>
+            <button id="wlAddSelf">上报我当前IP</button>
+            <button id="wlRefresh">刷新列表</button>
+            <span id="wlMsg" class="muted"></span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>当前白名单</h3>
+          <p class="muted">静态项来自服务器 .env（不可在此删除）；动态项可删除。点“刷新列表”查看。</p>
+          <div id="wlList"></div>
         </div>
       </section>
 

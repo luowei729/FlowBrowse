@@ -9,6 +9,7 @@ export const KEYS = {
   SUBS: 'fb_subs',           // 订阅数组（可增删改、更新）
   RUNTIME: 'fb_runtime',     // 运行态：是否已连接、最近探测结果
   RULES: 'fb_rules_cache',   // 远程拉取的 CN 规则缓存（离线可用、避免每次连接都拉）
+  WL: 'fb_wl',               // IP 白名单管理参数（服务器地址+管理密钥）；单独存放，不进导出 JSON 防泄密钥
 };
 
 // 代理凭据在 storage 中的键：auth.js 的 onAuthRequired 读它注入 Proxy-Authorization。
@@ -106,6 +107,19 @@ export async function getRulesCache() {
 export async function saveRulesCache(cache) {
   await chrome.storage.local.set({ [KEYS.RULES]: cache });
   return cache;
+}
+
+// ===== IP 白名单管理参数 =====
+// 为何独立成键：管理密钥 FB_ADMIN_TOKEN 属机密，放这里可被 options 读写、却不被“导入/导出”的 settings 携带，避免泄密。
+export async function getWl() {
+  const d = (await chrome.storage.local.get(KEYS.WL))[KEYS.WL] || {};
+  return { server: d.server || '', token: d.token || '' };
+}
+export async function setWl(patch) {
+  const cur = (await chrome.storage.local.get(KEYS.WL))[KEYS.WL] || {};
+  const next = { ...cur, ...patch };
+  await chrome.storage.local.set({ [KEYS.WL]: next });
+  return next;
 }
 
 // 生成短 id：节点/订阅都需要稳定标识，用于选择、去重与级联删除

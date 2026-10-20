@@ -80,6 +80,12 @@ function renderForms(state) {
   $('customDirect').value = settings.customDirect || '';
   $('customProxy').value = settings.customProxy || '';
   $('probeInterval').value = settings.probeIntervalMinutes || 10;
+  // IP 白名单管理参数回填（来自独立键 fb_wl，不进导出）
+  const wl = state.wl || { server: '', token: '' };
+  $('wlServer').value = wl.server || '';
+  $('wlToken').value = wl.token || '';
+  const ds = defaultServerFromState(state);
+  $('wlServer').placeholder = ds ? `留空=当前节点 ${ds}` : 'host:port';
   // 规则来源状态
   const rc = state.rulesCache;
   const el = $('rulesStatus');
@@ -170,6 +176,60 @@ $('updateRules').addEventListener('click', async () => {
 $('saveGeneral').addEventListener('click', async () => {
   await send({ action: 'setSettings', patch: { probeIntervalMinutes: parseInt($('probeInterval').value, 10) || 10 } });
   $('generalMsg').textContent = '已保存'; setTimeout(() => ($('generalMsg').textContent = ''), 1500);
+});
+
+// ===== IP 白名单管理 =====
+// 客户端推算默认服务器地址（仅用于 placeholder 展示，与 SW 的 defaultWlServer 口径一致）
+function defaultServerFromState(state) {
+  const { settings, nodes } = state || { settings: {}, nodes: [] };
+  let ap = settings.activeProfile || (settings.mode === 'off' ? 'direct' : (settings.mode === 'global' ? 'node:' + (settings.activeNodeId || '') : 'auto'));
+  let node = null;
+  if (ap === 'auto') node = nodes.find((n) => n.id === (settings.autoNodeId || settings.activeNodeId)) || nodes[0];
+  else if (ap && ap.startsWith('node:')) node = nodes.find((n) => n.id === ap.slice(5));
+  node = node || nodes[0];
+  return node && node.proxy ? `${node.proxy.host}:${node.proxy.port || 443}` : '';
+}
+function wlMsg(id, t) { const el = $(id); el.textContent = t; setTimeout(() => { el.textContent = ''; }, 3500); }
+function renderWlList(data, server) {
+  const box = $('wlList'); box.innerHTML = '';
+  if (!data) { const d = document.createElement('div'); d.className = 'wl-empty'; d.textContent = '点“刷新列表”查看。'; box.append(d); return; }
+  const statics = Array.isArray(data.static) ? data.static : [];
+  const dyn = data.dynamic || {}; const dynKeys = Object.keys(dyn);
+  if (server) { const h = document.createElement('div'); h.className = 'wl-empty'; h.textContent = '服务器：' + server; box.append(h); }
+  const s1 = document.createElement('div'); s1.className = 'wl-sec'; s1.textContent = `静态（${statics.length}）· 来自 .env 永久`; box.append(s1);
+  if (!statics.length) { const e = document.createElement('div'); e.className = 'wl-empty'; e.textContent = '无'; box.append(e); }
+  for (const s of statics) { const r = document.createElement('div'); r.className = 'wl-row'; r.innerHTML = `<span class="val">${esc(s)}</span><span class="muted">静态</span>`; box.append(r); }
+  const s2 = document.createElement('div'); s2.className = 'wl-sec'; s2.textContent = `动态（${dynKeys.length}）· 可删除`; box.append(s2);
+  if (!dynKeys.length) { const e = document.createElement('div'); e.className = 'wl-empty'; e.textContent = '无'; box.append(e); }
+  for (const k of dynKeys) { const r = document.createElement('div'); r.className = 'wl-row'; const left = document.createElement('span'); left.className = 'val'; left.textContent = `${k}  ·  到期 ${dyn[k]}`; const b = btn('删除', 'link danger', () => delWl(k)); r.append(left, b); box.append(r); }
+}
+async function doWlList() {
+  wlMsg('wlMsg', '查询中…');
+  const r = await send({ action: 'wlList' });
+  if (r && r.ok) { renderWlList(r.data, r.server); wlMsg('wlMsg', '已刷新'); }
+  else { $('wlList').innerHTML = '<div class="wl-empty">查询失败：' + esc((r && r.error) || '') + '</div>'; wlMsg('wlMsg', '失败'); }
+}
+async function delWl(target) {
+  if (!confirm(`删除放行项 ${target}？`)) return;
+  const r = await send({ action: 'wlDel', target });
+  if (r && r.ok) { wlMsg('wlMsg', '已删除'); doWlList(); } else wlMsg('wlMsg', '删除失败：' + ((r && r.error) || ''));
+}
+$('wlSave').addEventListener('click', async () => {
+  const r = await send({ action: 'wlSave', server: $('wlServer').value.trim(), token: $('wlToken').value });
+  wlMsg('wlCfgMsg', (r && r.ok) ? '已保存' : '保存失败');
+});
+$('wlRefresh').addEventListener('click', doWlList);
+$('wlAddBtn').addEventListener('click', async () => {
+  const target = $('wlAddTarget').value.trim(); const ttl = parseInt($('wlAddTtl').value, 10) || 0;
+  wlMsg('wlMsg', '提交中…');
+  const r = await send({ action: 'wlAdd', target, ttl });
+  if (r && r.ok) { wlMsg('wlMsg', '已添加：' + (r.text || '').trim()); $('wlAddTarget').value = ''; $('wlAddTtl').value = ''; doWlList(); }
+  else wlMsg('wlMsg', '失败：' + ((r && r.error) || ''));
+});
+$('wlAddSelf').addEventListener('click', async () => {
+  wlMsg('wlMsg', '上报本机IP…');
+  const r = await send({ action: 'wlAdd', target: 'auto' });
+  if (r && r.ok) { wlMsg('wlMsg', '已加入：' + (r.text || '').trim()); doWlList(); } else wlMsg('wlMsg', '失败：' + ((r && r.error) || ''));
 });
 
 // ===== 导入 / 导出 =====
